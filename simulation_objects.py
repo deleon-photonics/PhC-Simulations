@@ -135,3 +135,4 @@ class microdisk:
                            ("index", self.index)])
 
         sim.addcircle(properties=disk_properties)
+         
