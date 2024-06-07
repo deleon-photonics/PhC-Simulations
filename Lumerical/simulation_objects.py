@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import numpy as np
 
 #Simulation Objects
 #FDTD Object
@@ -109,6 +110,142 @@ class dipole:
 
 #Geometric Objects
 ###########################
+#Nominal hole phc
+class hole_phc:
+    def __init__(self, **kwargs):
+        self.name = "phc"
+
+        self.amir = 100e-9
+        self.acav = 100e-9
+        self.wz = 100e-9
+        self.wy = 100e-9
+        self.hx = 100e-9
+        self.hy = 100e-9
+
+        self.num_cav = 16
+        self.num_mir = 0
+        self.taper_exponent = 2
+
+        self.period_list = []
+        self.hx_list = []
+        self.hy_list = []
+
+        self.hx_error = 0
+        self.hy_error = 0
+        self.wy_error = 0
+        self.wz_error = 0
+        self.period_error = 0
+
+        self.custom_taper = []
+
+        self.index = 3.5
+        self.substrate_index = 2.4
+
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    def generate_hole_list_nominal(self):
+        mirror_holes = self.amir*np.ones(int(self.num_mir/2))
+
+        N = int(self.num_cav/2)
+        self.period_list = np.zeros(N)
+        a = (self.amir - self.acav)/ ((N-1) ** self.taper_exponent)
+        b = self.acav
+
+        for i in range(N):
+            self.period_list[i] = a*(i ** self.taper_exponent) + b
+
+        self.period_list = np.append(self.period_list, mirror_holes)
+        self.period_list = np.append(np.fliplr(self.period_list), self.period_list)
+
+        self.hx_list     = self.hx*np.ones((self.num_cav + self.num_mir))
+        self.hy_list     = self.hy*np.ones((self.num_cav + self.num_mir))
+    
+    def add_noise(self):
+        for i in range(len(self.period_list)):
+            self.period_list[i] = np.random.normal(self.period_list[i], self.period_error)
+            self.hx_list[i] = np.random.normal(self.hx_list[i], self.hx_error)
+            self.hy_list[i] = np.random.normal(self.hy_list[i], self.hy_error)
+        self.wy = np.random.normal(self.wy, self.wy_error)
+        self.wz = np.random.normal(self.wz, self.wz_error) 
+
+    def set_custom_taper(self):
+        mirror_holes = self.amir*np.ones(int(self.num_mir/2))
+        self.period_list = np.append(self.custom_taper, mirror_holes)
+        self.period_list = np.append(np.fliplr(self.period_list), self.period_list)
+
+    def add_substrate(self, sim):
+        substrate_properties = OrderedDict([
+            ("x", 0), 
+            ("x span", (self.num_cav + self.num_mir + 60)*self.amir + 10e-6),
+            ("y", 0), 
+            ("y span", 30*self.wy),
+            ("z min", -30*self.wz), 
+            ("z max", -self.wz/2),
+            ("material", "<Object defined dielectric>"), 
+            ("index", self.substrate_index),
+            ("override mesh order from material database", 1),
+            ("mesh order", 3)
+        ])
+        sim.addrect(properties = substrate_properties)
+
+    def add_to_sim(self, sim):    
+        beam_properties = OrderedDict([
+            ("x", 0), 
+            ("x span", (self.num_cav + self.num_mir + 60)*self.amir + 10e-6),
+            ("y", 0), 
+            ("y span", self.wy),
+            ("z", 0), 
+            ("z span", self.wz),
+            ("material", "<Object defined dielectric>"), 
+            ("index", self.index),
+            ("override mesh order from material database", 1),
+            ("mesh order", 2)
+        ])
+        sim.addrect(properties = beam_properties)
+
+        middle_index_left = len(self.period_list)//2 - 1
+        middle_index_right = len(self.period_list)//2
+
+        xpos_r = -self.period_list[middle_index_right]/2
+        xpos_l = self.period_list[middle_index_left]/2
+        for i in range(len(self.period_list)//2):
+            xpos_r += self.period_list[middle_index_right + i]
+            xpos_l -= self.period_list[middle_index_left - i]
+
+            right_hole = OrderedDict([
+                ("name", "right_hole_" + str(i)),
+                ("make ellipsoid", 1),
+                ("x", xpos_r), 
+                ("z", 0), 
+                ("z span", self.wz),
+                ("radius", self.hx_list[middle_index_right + i]/2), 
+                ("radius 2", self.hy_list[middle_index_right + i]/2),
+                ("material", "<Object defined dielectric>"), 
+                ("index", 1),
+                ("override mesh order from material database", 1),
+                ("mesh order", 1)
+            ])
+
+            left_hole = OrderedDict([
+                ("name", "left_hole_" + str(i)),
+                ("make ellipsoid", 1),
+                ("x", xpos_l), 
+                ("z", 0), 
+                ("z span", self.wz),
+                ("radius", self.hx_list[middle_index_left - i]/2), 
+                ("radius 2", self.hy_list[middle_index_left - i]/2),
+                ("material", "<Object defined dielectric>"), 
+                ("index", 1),
+                ("override mesh order from material database", 1),
+                ("mesh order", 1)
+            ])
+
+            sim.addcircle(properties = right_hole)
+            sim.addcircle(properties = left_hole)
+
+
 class microdisk:
     def __init__(self, **kwargs):
         self.name = "disk"
