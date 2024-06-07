@@ -80,6 +80,7 @@ class mesh:
 
         sim.addmesh(properties = mesh_properties)
 
+#Sources
 #Dipole source
 class dipole:
     def __init__(self, **kwargs):
@@ -107,6 +108,45 @@ class dipole:
 
         sim.adddipole(properties = dipole_properties)
 
+#Monitors
+class Qanalysis:
+    def __init__(self, **kwargs):
+        self.t_start = 0.5e-12
+        self.fmin = 0
+        self.fmax = 0
+        self.x = 20e-9
+        self.y = 20e-9
+        self.z = 20e-9
+        self.xspan = 10e-9
+        self.yspan = 10e-9
+        self.zspan = 10e-9
+
+        # Update properties with any provided keyword arguments
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+    
+    def add_to_sim(self, sim):
+        Q_properties =  [
+            ("use relative coordinates", 0),
+            ("make plots", 0),
+            ("x", self.x), 
+            ("x span", self.xspan),
+            ("y", self.y), 
+            ("y span", self.yspan),
+            ("z", self.z), 
+            ("z span", self.zspan),
+            ("nx", 2), 
+            ("ny", 2), 
+            ("nz", 2),
+            ("f min", self.fmin), 
+            ("f max", self.fmax),
+            ("t start", self.t_start)
+        ]
+
+        sim.addobject("Qanalysis")
+        for property in Q_properties:
+            sim.set(property[0], property[1])
 
 #Geometric Objects
 ###########################
