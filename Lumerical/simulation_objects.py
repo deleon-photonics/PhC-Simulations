@@ -1,5 +1,8 @@
 from collections import OrderedDict
 import numpy as np
+import random 
+import string
+
 
 #Simulation Objects
 #FDTD Object
@@ -12,7 +15,7 @@ class FDTD:
         self.yspan = 1e-6
         self.zspan = 1e-6
         self.mesh_accuracy = 2
-        self.sim_time = 1e-2
+        self.sim_time = 1e-12
         self.early_shutoff = 1
         self.dimension = "3D"
         self.max_bc = "PML"
@@ -26,7 +29,8 @@ class FDTD:
                 setattr(self, key, value)
 
     def add_to_sim(self, sim):
-        fdtd_properties = OrderedDict([("x", self.x),
+        if self.dimension == '3D':
+            fdtd_properties = OrderedDict([("x", self.x),
                            ("y", self.y),
                            ("z", self.z),
                            ("x span", self.xspan),
@@ -42,8 +46,23 @@ class FDTD:
                            ("x max bc", self.max_bc),
                            ("y max bc", self.max_bc),
                            ("z max bc", self.max_bc)])
+        else:
+            fdtd_properties = OrderedDict([("x", self.x),
+                           ("y", self.y),
+                           ("z", self.z),
+                           ("x span", self.xspan),
+                           ("y span", self.yspan),
+                           ("mesh accuracy", self.xspan),
+                           ("dimension", self.dimension),
+                           ("simulation time", self.sim_time),
+                           ("use early shutoff", self.early_shutoff),
+                           ("x min bc", self.xmin_bc),
+                           ("y min bc", self.ymin_bc),
+                           ("x max bc", self.max_bc),
+                           ("y max bc", self.max_bc)])
 
         sim.addfdtd(properties=fdtd_properties)
+        
 
 #Mesh Object
 class mesh:
@@ -90,6 +109,9 @@ class dipole:
         self.dipole_type = "Magnetic dipole"
         self.wvl_start = 1e-6,
         self.wvl_stop = 1e-6
+        self.phase = 0
+        self.theta = 0
+        self.phi = 0
 
         # Update properties with any provided keyword arguments
         for key, value in kwargs.items():
@@ -103,7 +125,10 @@ class dipole:
             ("y", self.y), 
             ("z", self.z),
             ("wavelength start", self.wvl_start),
-            ("wavelength stop", self.wvl_stop)
+            ("wavelength stop", self.wvl_stop),
+            ("phase", self.phase),
+            ("theta", self.theta),
+            ("phi", self.phi)
             ])
 
         sim.adddipole(properties = dipole_properties)
@@ -147,6 +172,92 @@ class Qanalysis:
         sim.addobject("Qanalysis")
         for property in Q_properties:
             sim.set(property[0], property[1])
+
+class DFT_monitor:
+    def __init__(self, **kwargs):
+        self.name = 'DFT_' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(100))
+        self.x = 0
+        self.y = 0
+        self.z = 0
+        self.type = 'Point'
+        self.num_freqs = 1
+        self.wvl_center = 1550e-9
+        self.source_limits = 1
+        self.override = 1
+        self.apodization = 'none'
+        self.apodization_center = 1000e-15
+        self.apodization_width = 750e-15
+        self.xspan = 1e-6
+        self.yspan = 1e-6
+        self.zspan = 1e-6
+
+        # Update properties with any provided keyword arguments
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+    
+    def add_to_sim(self, sim):        
+        DFT_props = [
+            ('name', self.name),
+            ("monitor type", self.type),
+            ("use relative coordinates", 0),
+            ("x", self.x), 
+            ("y", self.y), 
+            ("z", self.z), 
+            ('override global monitor settings', self.override),
+            ('use source limits', self.source_limits),
+            ('frequency points', self.num_freqs),
+            ('wavelength center', self.wvl_center)
+            ]
+        if self.apodization != 'none':
+            DFT_props.extend([('apodization', self.apodization),
+                ('apodization center', self.apodization_center),
+                ('apodization time width', self.apodization_width)
+            ])
+        if self.type == '2D Z-normal':
+            DFT_props.extend([('y span', self.yspan),
+                              ('x span', self.xspan)])
+        DFT_props = OrderedDict(DFT_props)
+        sim.addpower(properties = DFT_props)
+
+    def get_name(self):
+        return self.name
+
+class time_monitor:
+    def __init__(self, **kwargs):
+        self.name = 'time_' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(100))
+        self.x = 0
+        self.y = 0
+        self.z = 0
+        self.type = 'Point'
+        self.start_time = 0
+        #self.xspan = 1e-6
+        #self.yspan = 1e-6
+        #self.zspan = 1e-6
+
+        # Update properties with any provided keyword arguments
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    def add_to_sim(self, sim):
+        time_props = OrderedDict([
+            ('name', self.name),
+            ("monitor type", self.type),
+            ("use relative coordinates", 0),
+            ("x", self.x),
+            ("y", self.y),
+            ("z", self.z),
+            ("start time", self.start_time), 
+            ("output power", 1),
+            ("output Hx", 0), ("output Hy", 0), ("output Hz", 0),
+            ("output Ex", 1), ("output Ey", 1), ("output Ez", 1)
+            ])
+        sim.addtime(properties = time_props)
+        
+
+    def get_name(self):
+        return self.name
 
 #Geometric Objects
 ###########################
