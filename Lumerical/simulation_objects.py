@@ -36,7 +36,7 @@ class FDTD:
                            ("x span", self.xspan),
                            ("y span", self.yspan),
                            ("z span", self.zspan),
-                           ("mesh accuracy", self.xspan),
+                           ("mesh accuracy", self.mesh_accuracy),
                            ("dimension", self.dimension),
                            ("simulation time", self.sim_time),
                            ("use early shutoff", self.early_shutoff),
@@ -52,7 +52,7 @@ class FDTD:
                            ("z", self.z),
                            ("x span", self.xspan),
                            ("y span", self.yspan),
-                           ("mesh accuracy", self.xspan),
+                           ("mesh accuracy", self.mesh_accuracy),
                            ("dimension", self.dimension),
                            ("simulation time", self.sim_time),
                            ("use early shutoff", self.early_shutoff),
@@ -136,6 +136,7 @@ class dipole:
 #Monitors
 class Qanalysis:
     def __init__(self, **kwargs):
+        self.name = 'Q' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
         self.t_start = 0.5e-12
         self.fmin = 0
         self.fmax = 0
@@ -145,6 +146,9 @@ class Qanalysis:
         self.xspan = 10e-9
         self.yspan = 10e-9
         self.zspan = 10e-9
+        self.nx = 2
+        self.ny = 2
+        self.nz = 2
 
         # Update properties with any provided keyword arguments
         for key, value in kwargs.items():
@@ -153,6 +157,7 @@ class Qanalysis:
     
     def add_to_sim(self, sim):
         Q_properties =  [
+            ('name', self.name),
             ("use relative coordinates", 0),
             ("make plots", 0),
             ("x", self.x), 
@@ -161,9 +166,9 @@ class Qanalysis:
             ("y span", self.yspan),
             ("z", self.z), 
             ("z span", self.zspan),
-            ("nx", 2), 
-            ("ny", 2), 
-            ("nz", 2),
+            ("nx", self.nx), 
+            ("ny", self.ny), 
+            ("nz", self.nz),
             ("f min", self.fmin), 
             ("f max", self.fmax),
             ("t start", self.t_start)
@@ -173,15 +178,19 @@ class Qanalysis:
         for property in Q_properties:
             sim.set(property[0], property[1])
 
+    def get_name(self):
+        return self.name
+    
 class DFT_monitor:
     def __init__(self, **kwargs):
-        self.name = 'DFT_' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(100))
+        self.name = 'DFT_' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
         self.x = 0
         self.y = 0
         self.z = 0
         self.type = 'Point'
         self.num_freqs = 1
         self.wvl_center = 1550e-9
+        self.wvl_span = 0
         self.source_limits = 1
         self.override = 1
         self.apodization = 'none'
@@ -225,12 +234,13 @@ class DFT_monitor:
 
 class time_monitor:
     def __init__(self, **kwargs):
-        self.name = 'time_' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(100))
+        self.name = 'time_' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
         self.x = 0
         self.y = 0
         self.z = 0
         self.type = 'Point'
         self.start_time = 0
+        self.min_sampling = 10
         #self.xspan = 1e-6
         #self.yspan = 1e-6
         #self.zspan = 1e-6
@@ -251,7 +261,8 @@ class time_monitor:
             ("start time", self.start_time), 
             ("output power", 1),
             ("output Hx", 0), ("output Hy", 0), ("output Hz", 0),
-            ("output Ex", 1), ("output Ey", 1), ("output Ez", 1)
+            ("output Ex", 1), ("output Ey", 1), ("output Ez", 1),
+            ('min sampling per cycle', self.min_sampling)
             ])
         sim.addtime(properties = time_props)
         
