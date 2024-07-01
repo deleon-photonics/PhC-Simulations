@@ -18,9 +18,6 @@ from scipy.stats import norm
 
 import simulation_objects as so
 
-
-
-
 #Simulation Functions
 def Q_V_Simulation(cavity_parameters, high_resolution = 1, 
                    mesh_resolution = [10e-9, 10e-9, 10e-9]):
