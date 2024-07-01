@@ -139,6 +139,7 @@ class port:
         self.x = 0
         self.y = 0
         self.z = 0
+        self.xspan = 1e-6
         self.yspan = 1e-6
         self.zspan = 1e-6
         self.axis = 'x-axis'
@@ -151,19 +152,19 @@ class port:
                 setattr(self, key, value)
 
     def add_to_sim(self, sim):
-        port_properties = OrderedDict([
+        port_properties = [
             ("name", self.name),
+            ("injection axis", self.axis),
             ("x", self.x), 
             ("y", self.y), 
             ("z", self.z),
+            ("x span", self.xspan),
             ("y span", self.yspan),
             ("z span", self.zspan),
-            ("injection axis", self.axis),
             ("direction", self.direction),
-            ("mode selection", self.mode)])
+            ("mode selection", self.mode)]
 
         sim.addport()
-
         for property in port_properties:
             sim.set(property[0], property[1])
 
@@ -307,9 +308,50 @@ class time_monitor:
     def get_name(self):
         return self.name
 
+class Mode_Volume_Monitor:
+    def __init__(self, **kwargs):
+        self.name = 'ModeV' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
+        self.x = 0
+        self.y = 0
+        self.z = 0
+        self.xspan = 100e-9
+        self.yspan = 100e-9
+        self.zspan = 100e-9
+        self.analysis_wavelength = 955e-9
+
+        # Update properties with any provided keyword arguments
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+    
+    def add_to_sim(self, sim):
+        ModeV_props = [("use relative coordinates", 0),
+                   ("x", self.x), ("x span", self.xspan),
+                   ("y", self.y), ("y span", self.yspan),
+                   ("z", self.z), ("z span", self.zspan),
+                   ("calc type", 2)]
+
+        sim.addobject("mode_volume")
+        for property in ModeV_props:
+            sim.set(property[0], property[1])
+
+        ModeV_field_props = [
+            ('override global monitor settings', 1),
+            ('use source limits', 0),
+            ('frequency points', 1),
+            ('wavelength center', self.analysis_wavelength)
+            ]
+        for property in ModeV_field_props:
+            sim.setnamed("mode_volume::field", property[0], property[1])
+            sim.setnamed("mode_volume::index", property[0], property[1])
+
+
+    def get_name(self):
+        return self.name
+    
 #Geometric Objects
 ###########################
-#Nominal hole phc
+#Hole phc
 class hole_phc:
     def __init__(self, **kwargs):
         self.name = "phc"
@@ -369,7 +411,7 @@ class hole_phc:
         self.wy = np.random.normal(self.wy, self.wy_error)
         self.wz = np.random.normal(self.wz, self.wz_error) 
 
-    def set_custom_taper(self):
+    def use_custom_taper(self):
         mirror_holes = self.amir*np.ones(int(self.num_mir/2))
         self.period_list = np.append(self.custom_taper, mirror_holes)
         self.period_list = np.append(np.fliplr(self.period_list), self.period_list)
@@ -473,6 +515,39 @@ class microdisk:
 
         sim.addcircle(properties=disk_properties)
          
+class rectangular_grating:
+    def __init__(self, **kwargs):
+        self.name = "grating"
+        self.x_edge = 0
+        self.y = 0
+        self.z = 0
+        self.period = 1e-6
+        self.duty_cycle = 0.5
+        self.num_gratings = 10
+        self.wy = 1e-6
+        self.wz = 1e-6
+        self.material = "<Object defined dielectric>"
+        self.index = 2.4
+
+        # Update properties with any provided keyword arguments
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    def add_to_sim(self, sim):
+        xpos = self.x_edge + self.period*(1-self.duty_cycle)
+        for i in range(self.num_gratings):
+            grating_properties = OrderedDict([
+                ("x min", xpos), ("x max", xpos + self.period*self.duty_cycle), 
+                ("y", self.y),
+                ("z", self.z),
+                ("z span", self.wz),
+                ("y span", self.wy),
+                ("material", self.material),
+                ("index", self.index),
+                ('name', self.name + str(i))])
+            sim.addrect(properties=grating_properties)
+            xpos = xpos + self.period
 
 class waveguide:
     def __init__(self, **kwargs):

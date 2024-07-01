@@ -3,12 +3,15 @@ import lumapi as lp
 import numpy as np
 import os
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 from scipy.signal import find_peaks
-import os
 import pickle
 import scipy.io
+import math
 from scipy.optimize import curve_fit
 from scipy.constants import c
+import random
+import string
 
 
 # Fit each peak with a Lorentzian or Gaussian function
@@ -344,6 +347,131 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
         print(e)    
         return -1
         
+def PhC_Q_Simulation(cavity = None,
+                    sim_wvl = 955e-9, 
+                    min_boundary_conditions = ["symmetric", "anti-symmetric", "PML"],
+                    max_boundary_condition = "PML",
+                    output_folder =  None, 
+                    dimension = "3D",
+                    mesh_accuracy = 2,
+                    sim_time = 2e12,
+                    use_fine_mesh = 1,
+                    mesh_resolutions = [10e-9, 20e-9, 20e-9],
+                    save_mode_profiles = 1,
+                    cavity_name = 'cavity' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))):
+    
+    os.makedirs(output_folder, exist_ok=True)
+
+    sim = lp.FDTD(hide=True)
+
+    #Add FDTD Object
+    fdtd = so.FDTD(x = 0, y = 0, z = 0,
+                    xspan = (cavity.num_cav + cavity.num_mir + 10)*cavity.amir,
+                    yspan = (math.ceil(cavity.wy/cavity.amir) + 8)*cavity.amir,
+                    zspan = (math.ceil(cavity.wy/cavity.amir) + 8)*cavity.amir,
+                    mesh_accuracy = 2,
+                    dimension = dimension,
+                    early_shutoff = 0,
+                    max_BC = max_boundary_condition,
+                    xmin_bc = min_boundary_conditions[0],
+                    ymin_bc = min_boundary_conditions[1],
+                    zmin_bc = min_boundary_conditions[2],
+                    sim_time = sim_time)
+    fdtd.add_to_sim(sim)
+
+    #Add dipole sources
+    dipole_1 = so.dipole(type = "Magnetic dipole",
+                         x = 10e-9, y = 20e-9, z = 40e-9,
+                         wvl_start = 0.95*sim_wvl,
+                         wvl_stop = 1.05*sim_wvl)
+    dipole_1.add_to_sim(sim)
+
+    dipole_2 = so.dipole(type = "Magnetic dipole",
+                         x = 20e-9, y = 30e-9, z = 10e-9,
+                         wvl_start = 0.97*sim_wvl,
+                         wvl_stop = 1.03*sim_wvl)
+    dipole_2.add_to_sim(sim)
+
+    #Q-analysis object
+    Q_analysis = so.Qanalysis(t_start = 500e-12,
+                              fmin = 3e8/(sim_wvl + 50e-9),
+                              fmax = 3e8/(sim_wvl - 50e-9),
+                              x = 20e-9, y = 20e-9, z = cavity.wz/6,
+                              xspan = 10e-9, yspan = 10e-9, zspan = cavity.wz/3,
+                              nx = 2, ny = 2, nz = 2)
+    Q_analysis.add_to_sim(sim)
+
+    if use_fine_mesh == 1:
+        mesh = so.mesh(x = 0, y = 0, z = 0,
+                       xspan = (cavity.num_cav + cavity.num_mir + 2*cavity.num_tap + 10)*cavity.amir,
+                       yspan = 1.5*cavity.wy,
+                       zspan = 1.5*cavity.wz,
+                       x_resolution = mesh_resolutions[0],
+                       y_resolution = mesh_resolutions[1],
+                       z_resolution = mesh_resolutions[2])
+        mesh.add_to_sim(sim)
+
+    try:
+        sim.run()
+        sim.runanalysis()
+        Qcal            = sim.getresult(Q_analysis.get_name(), "Q")
+        maxQ            = np.max(Qcal['Q'])
+        ind_maxQ        = np.argmax(Qcal['Q'])
+        lambda_maxQ     = Qcal['lambda'][ind_maxQ]
+        f_maxQ          = Qcal['f'][ind_maxQ]
+    
+        #Mode volume and mode-profile
+        if save_mode_profiles == 1:
+            sim.switchtolayout()
+            ModeV_Monitor = so.Mode_Volume_Monitor(x = 0, y = 0, z = 0,
+                                                xspan = (cavity.num_cav + cavity.num_mir + 2)*cavity.amir,
+                                                yspan = (math.ceil(cavity.wy/cavity.amir) + 8)*cavity.amir - 3*cavity.amir,
+                                                zspan = (math.ceil(cavity.wy/cavity.amir) + 8)*cavity.amir - 3*cavity.amir,
+                                                analysis_wavelength = lambda_maxQ)
+            ModeV_Monitor.add_to_sim(sim)
+
+            xy_monitor = so.DFT_monitor(type='2D Z-normal',
+                                        source_limits = 0,
+                                        x=0, y=0, z = 0, 
+                                        xspan = (cavity.num_cav + cavity.num_mir + 10)*cavity.amir, 
+                                        yspan = (math.ceil(cavity.wy/cavity.amir) + 8)*cavity.amir,
+                                        override = 1, num_freqs = 1, wvl_center = lambda_maxQ)
+            xy_monitor.add_to_sim(sim)
+
+            sim.run()
+            sim.runanalysis()
+
+            ModeV           = sim.getresult(ModeV_Monitor.get_name(), "Volume")
+            ModeV_norm      = np.array(ModeV['V']) / ((lambda_maxQ / cavity.index)**3)
+            ModeV           = ModeV['V']
+            
+            Exy     = sim.getresult(xy_monitor.get_name(), "E")
+            Exy_x   = sim.getdata(xy_monitor.get_name(), "x")
+            Exy_y   = sim.getdata(xy_monitor.get_name(), "y")
+            Ey      = sim.getdata(xy_monitor.get_name(), "Ey")
+
+            FieldProfile = {'Monitor_Data'  : Exy,
+                            'x'             : Exy_x,
+                            'y'             : Exy_y,
+                            'Ey'            : Ey,
+                            'Cavity'        : vars(cavity),
+                            'Q'             : maxQ,
+                            'wvl'           : lambda_maxQ,
+                            'ModeVol'       : ModeV,
+                            'ModeVolNorm'   : ModeV_norm}
+            filename = f'FieldProfile_{str(cavity_name)}'
+            scipy.io.savemat((filename + '.mat'), {'FieldProfile': FieldProfile})
+            pickle.dump(FieldProfile, open((filename + '.p'), "wb"))
+            
+            return [maxQ, lambda_maxQ, ModeV, ModeV_norm]
+        
+        else:
+            return [maxQ, lambda_maxQ]
+        
+    except Exception as e:
+        print(f"No Resonance Found: {e}")
+        return -1           
+            
 def microdisk_coupler(disk_radius, disk_thickness, material_index, coupler_width, coupler_gap, wavelength):
     sim = lp.FDTD(hide=True)
 
@@ -363,13 +491,13 @@ def microdisk_coupler(disk_radius, disk_thickness, material_index, coupler_width
                    xmin_bc = 'PML',
                    ymin_bc = 'PML',
                    zmin_bc = 'PML',
-                   mesh_accuracy = 1)
+                   mesh_accuracy = 3)
     fdtd.add_to_sim(sim)
 
     coupler = so.waveguide(x = 0,
                            y = 0,
                            z = 0,
-                           wx = disk_radius,
+                           wx = fdtd.xspan + 2*wavelength,
                            wy = coupler_width,
                            wz = disk_thickness,
                            index = material_index)
@@ -379,16 +507,182 @@ def microdisk_coupler(disk_radius, disk_thickness, material_index, coupler_width
                         x = 0, z = 0, y = disk_radius + coupler_gap + coupler_width/2)
     disk.add_to_sim(sim)
 
-    input_port = so.port(name = 'Input', x = -disk_radius/2 + wavelength/2, y = 0, z = 0, 
+    input_port = so.port(name = 'Input', x = -disk_radius/2 + wavelength, y = 0, z = 0, 
                           yspan = 1.5*wavelength, zspan = 1.5*wavelength)
     input_port.add_to_sim(sim)
+
+    output_port = so.port(name = 'Output', x = disk_radius/2 - wavelength, y = 0, z = 0, 
+                          yspan = 1.5*wavelength, zspan = 1.5*wavelength)
+    output_port.add_to_sim(sim)
+
+    ref_port = so.port(name = 'Reflection', x = -disk_radius/2 + wavelength/2, y = 0, z = 0, 
+                          yspan = 1.5*wavelength, zspan = 1.5*wavelength,
+                          direction = 'Backward')
+    ref_port.add_to_sim(sim)
+
+    field_monitor = so.DFT_monitor(type='2D Z-normal',
+                                        source_limits = 0,
+                                        x=0, 
+                                        y=0,
+                                        z = 0, 
+                                        xspan = fdtd.xspan, 
+                                        yspan = fdtd.yspan,
+                                        num_freqs = 1, 
+                                        wvl_center = wavelength, 
+                                        apodization = 'none')
+    field_monitor.add_to_sim(sim)
 
     if os.path.isfile('gui.fps'):
         os.remove('gui.fsp')
     sim.save('gui.fsp')
     
-    #try:
-    #    sim.run()
+    try:
+        sim.run()
+        outport_result = sim.getresult(output_port.get_name(), 'expansion for port monitor')
+        refport_result = sim.getresult(ref_port.get_name(), 'expansion for port monitor')
+        Tnet = outport_result['T_total'] + refport_result['T_total']
+        Tc = 1 - Tnet
 
-        
+        field_profile_data = sim.getresult(field_monitor.get_name(), 'E')
+        E_ = field_profile_data['E']
+        E = E_[:,:,0,0,:]
+        x = field_profile_data['x']
+        y = field_profile_data['y']
+        E_sq = np.abs((np.sum(E * np.conjugate(E), axis = 2)))
 
+        plt.figure(figsize=(8, 6))
+        plt.imshow(np.transpose(E_sq), extent=[np.min(x), np.max(x), np.min(y), np.max(y)], 
+                   origin='lower', cmap='viridis', aspect='auto') #, norm=LogNorm()
+        #plt.xlim(x_pos.min(), x_pos.max())
+        #plt.ylim(y_pos.min(), y_pos.max())
+        plt.colorbar(label='Magnitude')  # Add a color bar to show the magnitude scale
+        plt.xlabel('X axis')
+        plt.ylabel('Y axis')
+        plt.title('|E|^2')
+        plt.savefig(os.path.join(output_folder, 'Esq.png'))
+        plt.close()
+
+        return Tc[0][0]
+    
+    except Exception as e:
+        print(e)
+        return -1
+
+def rectangular_grating_sim(grating_width, grating_thickness, 
+                            period, duty_cycle, 
+                            num_gratings,
+                            material_index, 
+                            objective_NA, 
+                            wavelength):
+    sim = lp.FDTD(hide=True)
+
+    #output_folder = "grating_width_" + str(int(grating_width*1e9)) + "nm_period_" + str(int(period*1e9)) + "nm_duty_cycle_" + str(int(duty_cycle*100))
+    #os.makedirs(output_folder, exist_ok=True)
+
+    grating_length = 2e-6
+
+    sim.setglobalsource("wavelength start", 1550e-9)
+    sim.setglobalsource("wavelength stop", 1550e-9)
+    sim.setglobalmonitor("wavelength center", 1550e-9)
+    sim.setglobalmonitor("wavelength span", 0)
+
+    fdtd = so.FDTD(yspan = grating_width + 2*wavelength,
+                   xspan = (num_gratings+1)*period + grating_length,
+                   zspan = grating_thickness + 2*wavelength,
+                   x = ((num_gratings+1)*period - grating_length)/2,
+                   dimension = "3D",
+                   sim_time = 2e-12,
+                   xmin_bc = 'PML',
+                   ymin_bc = 'anti-symmetric',
+                   zmin_bc = 'PML',
+                   mesh_accuracy = 3)
+    fdtd.add_to_sim(sim)
+
+    #Input waveguide
+    input_waveguide = so.waveguide(x = -grating_length/2,
+                                    y = 0,
+                                    z = 0,
+                                    wx = grating_length,
+                                    wy = grating_width,
+                                    wz = grating_thickness,
+                                    index = material_index)   
+    input_waveguide.add_to_sim(sim)
+
+    #Grating
+    grating = so.rectangular_grating(x_edge = 0, y = 0, z = 0,
+                                     wy = grating_width, wz = grating_thickness,
+                                     period = period, duty_cycle = duty_cycle,
+                                     num_gratings = num_gratings,
+                                     index = material_index)
+    grating.add_to_sim(sim)
+
+    #Input port
+    input_port = so.port(name = 'Input', x = -1e-6, y = 0, z = 0,
+                          yspan = 1.5*wavelength, zspan = 1.5*wavelength)
+    input_port.add_to_sim(sim)
+
+    #Thru port
+    thru_port = so.port(name = 'Thru', x = num_gratings*period - wavelength, y = 0, z = 0,
+                          yspan = 1.5*wavelength, zspan = 1.5*wavelength)
+    thru_port.add_to_sim(sim)
+
+    #Vertical port
+    field_monitor = so.DFT_monitor(type='2D Z-normal',
+                                        source_limits = 0,
+                                        x=fdtd.x, 
+                                        y=0,
+                                        z = fdtd.zspan/2 - 200e-9, 
+                                        xspan = fdtd.xspan, 
+                                        yspan = fdtd.yspan,
+                                        num_freqs = 1, 
+                                        wvl_center = wavelength, 
+                                        apodization = 'none')
+    field_monitor.add_to_sim(sim)
+
+    if os.path.isfile('gui.fps'):
+        os.remove('gui.fsp')
+    sim.save('gui.fsp')
+    
+    try:
+        sim.run()
+        outport_result = sim.getresult(field_monitor.get_name(), 'T')
+        T = outport_result['T'][0]
+
+        #refport_result = sim.getresult(ref_port.get_name(), 'expansion for port monitor')
+
+        E = sim.farfield3d(field_monitor.get_name(),  1)
+        ux = sim.farfieldux(field_monitor.get_name(),  1)
+        uy = sim.farfielduy(field_monitor.get_name(),  1)
+
+        halfangle=0.5*np.arcsin(objective_NA)*180/np.pi
+
+        cone = sim.farfield3dintegrate(E, ux, uy, halfangle, 0, 0) 
+        total = sim.farfield3dintegrate(E, ux, uy) 
+        ratio = cone/total  
+
+        field_profile_data = sim.getresult(field_monitor.get_name(), 'E')
+        E_ = field_profile_data['E']
+        E = E_[:,:,0,0,:]
+        x = field_profile_data['x']
+        y = field_profile_data['y']
+        E_sq = np.abs((np.sum(E * np.conjugate(E), axis = 2)))
+
+        #plt.figure(figsize=(8, 6))
+        #plt.imshow(np.transpose(E_sq), extent=[np.min(x), np.max(x), np.min(y), np.max(y)], 
+        #           origin='lower', cmap='viridis', aspect='auto') #, norm=LogNorm()
+        #plt.xlim(x_pos.min(), x_pos.max())
+        #plt.ylim(y_pos.min(), y_pos.max())
+        #plt.colorbar(label='Magnitude')  # Add a color bar to show the magnitude scale
+        #plt.xlabel('X axis')
+        #plt.ylabel('Y axis')
+        #plt.title('|E|^2')
+        #plt.savefig(os.path.join(output_folder, 'Esq.png'))
+        #plt.close()
+
+        T_total = T*ratio
+        print(T, ratio, T_total)
+        return [T, ratio, T_total]
+    
+    except Exception as e:
+        print(e)
+        return -1
