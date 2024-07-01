@@ -58,17 +58,34 @@ def compute_fft(E, dt, pad_factor=1):
     return freqs, E_fft
 
 #Microdisk resonances
-def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength, wavelength_span):
+def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength, wavelength_span,
+                         sub_disk = 0, sub_disk_radius = 0):
+    
+    sim = lp.FDTD(hide=True)
+
     output_folder = "r_" + str(int(disk_radius*1e9)) + "nm_t_" + str(int(disk_thickness*1e9)) + "nm"
+    FDTD_zmin_BC = "symmetric"
+    if sub_disk == 1:
+        subdisk = so.microdisk(thickness = disk_thickness/2 + wavelength,
+                                z = -disk_thickness/2 - (disk_thickness/2 + wavelength)/2,
+                                radius = sub_disk_radius, index = material_index,
+                                name = "sub_disk")
+        subdisk.add_to_sim(sim)
+        FDTD_zmin_BC = "PML"
+        output_folder = ("r_" + str(int(disk_radius*1e9)) + "nm_t_" + 
+                         str(int(disk_thickness*1e9))  + "nm_U_" + 
+                         str(int((disk_radius - sub_disk_radius)*1e9)) + "nm")
+    
     os.makedirs(output_folder, exist_ok=True)
 
-    sim = lp.FDTD(hide=True)
     sim.setglobalsource("wavelength start", wavelength - wavelength_span/2)
     sim.setglobalsource("wavelength stop", wavelength + wavelength_span/2)
     sim.setglobalmonitor("wavelength center", wavelength)
-    sim.setglobalmonitor("wavelength span", 50e-9)
+    sim.setglobalmonitor("wavelength span", 2*wavelength_span)
+
     disk = so.microdisk(thickness = disk_thickness, radius = disk_radius, index = material_index)
     disk.add_to_sim(sim)
+
     if disk_thickness == 0:
         dimension = '2D'
         dipole_angle = 90
@@ -82,7 +99,7 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
                    sim_time = 6e-12,
                    xmin_bc = 'symmetric',
                    ymin_bc = 'anti-symmetric',
-                   zmin_bc = 'symmetric',
+                   zmin_bc = FDTD_zmin_BC,
                    mesh_accuracy = 3)
     fdtd.add_to_sim(sim)
 
@@ -130,7 +147,7 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
         with np.errstate(divide='ignore', invalid='ignore'):
             wvls = np.where(freqs != 0, c / freqs, np.inf)  # Avoid divide by zero
 
-        peaks,_ = find_peaks(E_power_spectrum, height=0.01, distance=1) #
+        peaks,_ = find_peaks(E_power_spectrum, height=0.02, distance=1) #
         all_res_wvls = wvls[peaks]
         res_wvls = np.array(all_res_wvls[np.abs(all_res_wvls - wavelength) < wavelength_span])
         closest_res_wvl = all_res_wvls[np.argmin(np.abs(all_res_wvls - wavelength))]
@@ -144,6 +161,7 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
         plt.xlim((1500e-9, 1600e-9))
         plt.savefig(os.path.join(output_folder, 'FFT.png'))
         plt.close()
+        
 
         if len(res_wvls) == 0:
             res_wvls = np.array([closest_res_wvl])
@@ -159,23 +177,31 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
                                     nx=2, ny=2, nz = 2,
                                     fmin = c/(np.max(res_wvls) + wavelength_span/2), fmax = c/(np.min(res_wvls)-wavelength_span/2),
                                     start_time = 500e-15)
+
             Qanalysis.add_to_sim(sim)
 
             sim.run()
-            sim.runanalysis()
-            Qvals = sim.getresult(Qanalysis.get_name(), 'Q')
-            Q = Qvals['Q']
-            Q_res_wvls = Qvals['lambda']
+            try:
+                sim.runanalysis()
+                Qvals = sim.getresult(Qanalysis.get_name(), 'Q')
+                Q = Qvals['Q']
+                Q_res_wvls = Qvals['lambda']
 
-            plt.figure(figsize=(8, 6))
-            plt.plot(Q_res_wvls*1e9, Q, 'o')
-            plt.xlabel('resonance wavelength (nm)')
-            plt.ylabel('Q')
-            plt.grid(True)
-            plt.savefig(os.path.join(output_folder, 'Q_vs_wvl.png'))
-            plt.close()     
+                plt.figure(figsize=(8, 6))
+                plt.plot(Q_res_wvls*1e9, Q, 'o')
+                plt.xlabel('resonance wavelength (nm)')
+                plt.ylabel('Q')
+                plt.grid(True)
+                plt.yscale('log')
+                plt.savefig(os.path.join(output_folder, 'Q_vs_wvl.png'))
+                plt.close()     
         
-        if len(Q_res_wvls) > 0:
+                Q_res_wvls = np.append(res_wvls, Q_res_wvls)
+                Q_res_wvls = np.unique(Q_res_wvls)
+            except Exception as e:
+                print(f"Error: {e}")
+
+            Q_res_wvls = res_wvls
             sim.switchtolayout()
             DFT_monitor_list = [None] * len(Q_res_wvls)
             for i in range(len(Q_res_wvls)):
@@ -198,7 +224,7 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
             x = np.cos(theta*np.pi/180)*(disk_radius - wavelength/8)
             y = np.sin(theta*np.pi/180)*(disk_radius - wavelength/8)
             DFT_monitor = so.DFT_monitor(x=x, y=y, z = 5e-9, num_freqs = 5000,
-                                         wvl_center = np.mean(Q_res_wvls), wvl_span = (np.max(Q_res_wvls) + wavelength_span/2) - (np.min(Q_res_wvls)-wavelength_span/2),
+                                         wvl_center = np.mean(Q_res_wvls), wvl_span = 3*wavelength_span,
                                          source_limits = 0,
                                          apodization = 'full', apodization_center = 3500e-15, apodization_width = 2000e-15)
             DFT_monitor.add_to_sim(sim)
@@ -218,10 +244,10 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
                 x0 = np.argmin(np.abs(x))
                 y0 = np.argmin(np.abs(y))
 
-                x_pos = x[x0+5:-5]
-                y_pos = y[y0+5:-5]
+                x_pos = x[x0+20:-20]
+                y_pos = y[y0+20:-20]
 
-                sliced_E_sq = E_sq[x0+5:-5, y0+5:-5]
+                sliced_E_sq = E_sq[x0+20:-20, y0+20:-20]
                 
                 max = 0
                 for j in range(0, len(x_pos)):
@@ -318,6 +344,51 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
         print(e)    
         return -1
         
+def microdisk_coupler(disk_radius, disk_thickness, material_index, coupler_width, coupler_gap, wavelength):
+    sim = lp.FDTD(hide=True)
+
+    output_folder = "coupler_width_" + str(int(coupler_width*1e9)) + "nm_gap_" + str(int(coupler_gap*1e9)) + "nm"
+    os.makedirs(output_folder, exist_ok=True)
+
+    sim.setglobalsource("wavelength start", wavelength)
+    sim.setglobalsource("wavelength stop", wavelength)
+    sim.setglobalmonitor("wavelength center", wavelength)
+    sim.setglobalmonitor("wavelength span", 0)
+
+    fdtd = so.FDTD(xspan = disk_radius + 2*wavelength, 
+                   yspan = coupler_width*2 + 2*wavelength, 
+                   zspan = disk_thickness + 2*wavelength, 
+                   dimension = "3D", 
+                   sim_time = 6e-12,
+                   xmin_bc = 'PML',
+                   ymin_bc = 'PML',
+                   zmin_bc = 'PML',
+                   mesh_accuracy = 1)
+    fdtd.add_to_sim(sim)
+
+    coupler = so.waveguide(x = 0,
+                           y = 0,
+                           z = 0,
+                           wx = disk_radius,
+                           wy = coupler_width,
+                           wz = disk_thickness,
+                           index = material_index)
+    coupler.add_to_sim(sim)
+
+    disk = so.microdisk(thickness = disk_thickness, radius = disk_radius, index = material_index,
+                        x = 0, z = 0, y = disk_radius + coupler_gap + coupler_width/2)
+    disk.add_to_sim(sim)
+
+    input_port = so.port(name = 'Input', x = -disk_radius/2 + wavelength/2, y = 0, z = 0, 
+                          yspan = 1.5*wavelength, zspan = 1.5*wavelength)
+    input_port.add_to_sim(sim)
+
+    if os.path.isfile('gui.fps'):
+        os.remove('gui.fsp')
+    sim.save('gui.fsp')
+    
+    #try:
+    #    sim.run()
 
         
 

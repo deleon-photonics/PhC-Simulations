@@ -15,9 +15,10 @@ import scipy.optimize
 import pandas as pd
 import time
 from scipy.stats import norm
+import scipy
 
 import simulation_objects as so
-
+import simulation_routines as sr
 
 
 
@@ -884,12 +885,45 @@ def Ncav_Nmir_Sweep(cavity_parameters, num_cav_hole_list, num_mir_hole_list):
 
 run_date = date.today()
 
-wavelength = 1550e-9
-material_index = 2.3682
-substrate_index = 1
-sim = lp.FDTD(hide=False)
+wavelength = 1549e-9
 
-disk = so.microdisk(thickness = 1e-6, radius = 10e-6, index = material_index)
-disk.add_to_sim(sim)
-fdtd = so.FDTD()
-fdtd.add_to_sim(sim)
+sr.microdisk_coupler(disk_radius=25e-6, disk_thickness=500e-9, material_index=2.3682, coupler_width=750e-9, coupler_gap=200e-9, wavelength=wavelength)
+
+#results = sr.microdisk_resonances(disk_radius=5.1e-6, disk_thickness=0, material_index=2.3682, wavelength=wavelength, wavelength_span=10e-9)
+
+""" disk_radii = [25e-6]#np.array([5, 7.5, 10, 15, 20])*1e-6
+thicknesses = [0.5e-6, 1e-6]#np.array([0.5e-6, 1e-6, 2e-6])
+sub_radii = [22e-6, 3e-6]
+
+Q = []
+res_wvls = []
+decay_lengths = []
+FSR = []
+rad = []
+thick = []
+
+for t in thicknesses:
+    for r in disk_radii:
+        for sub_r in sub_radii:
+            results  = sr.microdisk_resonances(disk_radius=r, 
+                                               disk_thickness=t,
+                                               sub_disk=1, sub_disk_radius=sub_r, 
+                                               material_index=2.3682,  wavelength=wavelength, wavelength_span=50e-9)
+            if results != -1:
+                Q.append(results['Q_factors'])
+                res_wvls.append(results['resonance_wavelengths'])
+                decay_lengths.append(results['decay_lengths'])
+                rad.append(r)
+                thick.append(t)
+
+            results = {'resonance_wavelengths': res_wvls,
+                        'Q_factors' : Q,
+                        'decay_lengths': decay_lengths,
+                        "radii": rad,
+                        "thicknesses": thick,
+                        'FSR'   : FSR}
+
+            with open(str(run_date)+"_r_t_sweep_UndercutSweep.p", "wb") as f:
+                pickle.dump(results, f)
+
+ """

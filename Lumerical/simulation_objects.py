@@ -133,6 +133,43 @@ class dipole:
 
         sim.adddipole(properties = dipole_properties)
 
+class port:
+    def __init__(self, **kwargs):
+        self.name = 'port'
+        self.x = 0
+        self.y = 0
+        self.z = 0
+        self.yspan = 1e-6
+        self.zspan = 1e-6
+        self.axis = 'x-axis'
+        self.direction = 'Forward'
+        self.mode = 'Fundamental TE Mode'
+
+        # Update properties with any provided keyword arguments
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    def add_to_sim(self, sim):
+        port_properties = OrderedDict([
+            ("name", self.name),
+            ("x", self.x), 
+            ("y", self.y), 
+            ("z", self.z),
+            ("y span", self.yspan),
+            ("z span", self.zspan),
+            ("injection axis", self.axis),
+            ("direction", self.direction),
+            ("mode selection", self.mode)])
+
+        sim.addport()
+
+        for property in port_properties:
+            sim.set(property[0], property[1])
+
+    def get_name(self):
+        return "FDTD::ports::" + self.name
+
 #Monitors
 class Qanalysis:
     def __init__(self, **kwargs):
@@ -431,7 +468,39 @@ class microdisk:
                            ("z span", self.thickness),
                            ("radius", self.radius),
                            ("material", self.material),
-                           ("index", self.index)])
+                           ("index", self.index),
+                           ('name', self.name)])
 
         sim.addcircle(properties=disk_properties)
+         
+
+class waveguide:
+    def __init__(self, **kwargs):
+        self.name = "waveguide"
+        self.x = 0
+        self.y = 0
+        self.z = 0
+        self.wx = 1e-6
+        self.wy = 1e-6
+        self.wz = 1e-6
+        self.material = "<Object defined dielectric>"
+        self.index = 2.4
+
+        # Update properties with any provided keyword arguments
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    def add_to_sim(self, sim):
+        waveguide_properties = OrderedDict([("x", self.x),
+                           ("y", self.y),
+                           ("z", self.z),
+                           ("x span", self.wx),
+                           ("y span", self.wy),
+                           ("z span", self.wz),
+                           ("material", self.material),
+                           ("index", self.index),
+                           ('name', self.name)])
+
+        sim.addrect(properties=waveguide_properties)
          
