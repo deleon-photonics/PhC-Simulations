@@ -15,8 +15,12 @@ import scipy.optimize
 import pandas as pd
 import time
 from scipy.stats import norm
+import scipy
 
 import simulation_objects as so
+import simulation_routines as sr
+
+
 
 #Simulation Functions
 def Q_V_Simulation(cavity_parameters, high_resolution = 1, 
@@ -881,12 +885,118 @@ def Ncav_Nmir_Sweep(cavity_parameters, num_cav_hole_list, num_mir_hole_list):
 
 run_date = date.today()
 
-wavelength = 1550e-9
-material_index = 2.3682
-substrate_index = 1
-sim = lp.FDTD(hide=False)
+wavelength = 1549e-9
 
-disk = so.microdisk(thickness = 1e-6, radius = 10e-6, index = material_index)
-disk.add_to_sim(sim)
-fdtd = so.FDTD()
-fdtd.add_to_sim(sim)
+sr.rectangular_grating_sim(grating_width=2e-6, grating_thickness=500e-9, period=1e-6, duty_cycle=0.3, num_gratings=10, material_index=2.3682, objective_NA=0.65,
+                           wavelength=wavelength)
+
+periods = np.linspace(500e-9, 2000e-9, 31)
+dcs = np.linspace(0.1, 0.9, 17)
+widths = np.linspace(1e-6, 9e-6, 5)
+
+for width in widths:
+    Ttotal = np.zeros((len(periods), len(dcs)))
+    Overlap = np.zeros((len(periods), len(dcs)))
+    Tnet = np.zeros((len(periods), len(dcs)))
+    for i in range(len(periods)):
+        for j in range(len(dcs)):
+            [Ttotal[i,j], Overlap[i,j], Tnet[i,j]] = sr.rectangular_grating_sim(
+                    grating_width=width, grating_thickness=500e-9, 
+                    period=periods[i], duty_cycle=dcs[j], num_gratings=10, 
+                    material_index=2.3682, objective_NA=0.65,
+                    wavelength=wavelength)
+            results = {'wavelength' : wavelength,
+                        'width'    : width,
+                        'periods'      : periods,
+                        "dcs"        : dcs,
+                        "Ttotal"    : Ttotal,
+                        'Overlap'    : Overlap,
+                        'Tnet'    : Tnet}
+
+            with open(str(run_date)+"_width_" + str(int(width*1e9)) + "nm_Period_DC_sweep.p", "wb") as f:
+                pickle.dump(results, f)
+            scipy.io.savemat(str(run_date)+"_width_" + str(int(width*1e9)) + "nm_Period_DC_sweep.mat", results)
+    
+    plt.imshow(np.transpose(Tnet), extent=[np.min(periods), np.max(periods), np.min(dcs), np.max(dcs)], 
+            origin='lower', cmap='viridis', aspect='auto') #, norm=LogNorm()
+    #plt.xlim(x_pos.min(), x_pos.max())
+    #plt.ylim(y_pos.min(), y_pos.max())
+    plt.colorbar(label='Tnet')  # Add a color bar to show the magnitude scale
+    plt.xlabel('Period')
+    plt.ylabel('Duty Cycle')
+    plt.title('Width = ' + str(width*1e9) + "nm")
+    plt.savefig(str(run_date)+"_width_" + str(int(width*1e9)) + "nm_Period_DC_sweep.png")
+    plt.close()
+
+
+""" coupler_widths = np.linspace(400e-9, 800e-9, 17)
+coupler_gaps = np.linspace(100e-9, 500e-9, 17)
+Tcoupled = np.zeros((len(coupler_widths), len(coupler_gaps)))
+
+for i in range(len(coupler_widths)):
+    for j in range(len(coupler_gaps)):
+        T = sr.microdisk_coupler(disk_radius=25e-6, disk_thickness=500e-9, material_index=2.3682, 
+                                 coupler_width=coupler_widths[i], coupler_gap=coupler_gaps[j], wavelength=wavelength)
+        Tcoupled[i,j] = T
+        results = {'wavelength' : wavelength,
+                    'widths'    : coupler_widths,
+                    'gaps'      : coupler_gaps,
+                    "Tc"        : Tcoupled,
+                    "disk_r"    : 25e-6,
+                    'disk_t'    : 500e-9}
+
+        with open(str(run_date)+"_coupler_width_gap_sweep.p", "wb") as f:
+            pickle.dump(results, f)
+        scipy.io.savemat(str(run_date)+"_coupler_width_gap_sweep.mat", results)
+
+plt.imshow(np.transpose(Tcoupled), extent=[np.min(coupler_widths), np.max(coupler_widths), np.min(coupler_gaps), np.max(coupler_gaps)], 
+            origin='lower', cmap='viridis', aspect='auto') #, norm=LogNorm()
+#plt.xlim(x_pos.min(), x_pos.max())
+#plt.ylim(y_pos.min(), y_pos.max())
+plt.colorbar(label='Tc')  # Add a color bar to show the magnitude scale
+plt.xlabel('Coupler Width')
+plt.ylabel('Coupler Gap')
+plt.title('Tc')
+plt.savefig('Tc.png')
+plt.close()
+ """
+#S = sr.microdisk_coupler(disk_radius=25e-6, disk_thickness=500e-9, material_index=2.3682, coupler_width=750e-9, coupler_gap=200e-9, wavelength=wavelength)
+
+#results = sr.microdisk_resonances(disk_radius=5.1e-6, disk_thickness=0, material_index=2.3682, wavelength=wavelength, wavelength_span=10e-9)
+
+""" disk_radii = [25e-6]#np.array([5, 7.5, 10, 15, 20])*1e-6
+thicknesses = [0.5e-6, 1e-6]#np.array([0.5e-6, 1e-6, 2e-6])
+sub_radii = [22e-6, 3e-6]
+
+Q = []
+res_wvls = []
+decay_lengths = []
+FSR = []
+rad = []
+thick = []
+
+for t in thicknesses:
+    for r in disk_radii:
+        for sub_r in sub_radii:
+            results  = sr.microdisk_resonances(disk_radius=r, 
+                                               disk_thickness=t,
+                                               sub_disk=1, sub_disk_radius=sub_r, 
+                                               material_index=2.3682,  wavelength=wavelength, wavelength_span=50e-9)
+            if results != -1:
+                Q.append(results['Q_factors'])
+                res_wvls.append(results['resonance_wavelengths'])
+                decay_lengths.append(results['decay_lengths'])
+                rad.append(r)
+                thick.append(t)
+
+            results = {'resonance_wavelengths': res_wvls,
+                        'Q_factors' : Q,
+                        'decay_lengths': decay_lengths,
+                        "radii": rad,
+                        "thicknesses": thick,
+                        'FSR'   : FSR}
+
+            with open(str(run_date)+"_r_t_sweep_UndercutSweep.p", "wb") as f:
+                pickle.dump(results, f)
+
+ """

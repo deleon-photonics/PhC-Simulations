@@ -133,6 +133,44 @@ class dipole:
 
         sim.adddipole(properties = dipole_properties)
 
+class port:
+    def __init__(self, **kwargs):
+        self.name = 'port'
+        self.x = 0
+        self.y = 0
+        self.z = 0
+        self.xspan = 1e-6
+        self.yspan = 1e-6
+        self.zspan = 1e-6
+        self.axis = 'x-axis'
+        self.direction = 'Forward'
+        self.mode = 'Fundamental TE Mode'
+
+        # Update properties with any provided keyword arguments
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    def add_to_sim(self, sim):
+        port_properties = [
+            ("name", self.name),
+            ("injection axis", self.axis),
+            ("x", self.x), 
+            ("y", self.y), 
+            ("z", self.z),
+            ("x span", self.xspan),
+            ("y span", self.yspan),
+            ("z span", self.zspan),
+            ("direction", self.direction),
+            ("mode selection", self.mode)]
+
+        sim.addport()
+        for property in port_properties:
+            sim.set(property[0], property[1])
+
+    def get_name(self):
+        return "FDTD::ports::" + self.name
+
 #Monitors
 class Qanalysis:
     def __init__(self, **kwargs):
@@ -472,7 +510,72 @@ class microdisk:
                            ("z span", self.thickness),
                            ("radius", self.radius),
                            ("material", self.material),
-                           ("index", self.index)])
+                           ("index", self.index),
+                           ('name', self.name)])
 
         sim.addcircle(properties=disk_properties)
+         
+class rectangular_grating:
+    def __init__(self, **kwargs):
+        self.name = "grating"
+        self.x_edge = 0
+        self.y = 0
+        self.z = 0
+        self.period = 1e-6
+        self.duty_cycle = 0.5
+        self.num_gratings = 10
+        self.wy = 1e-6
+        self.wz = 1e-6
+        self.material = "<Object defined dielectric>"
+        self.index = 2.4
+
+        # Update properties with any provided keyword arguments
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    def add_to_sim(self, sim):
+        xpos = self.x_edge + self.period*(1-self.duty_cycle)
+        for i in range(self.num_gratings):
+            grating_properties = OrderedDict([
+                ("x min", xpos), ("x max", xpos + self.period*self.duty_cycle), 
+                ("y", self.y),
+                ("z", self.z),
+                ("z span", self.wz),
+                ("y span", self.wy),
+                ("material", self.material),
+                ("index", self.index),
+                ('name', self.name + str(i))])
+            sim.addrect(properties=grating_properties)
+            xpos = xpos + self.period
+
+class waveguide:
+    def __init__(self, **kwargs):
+        self.name = "waveguide"
+        self.x = 0
+        self.y = 0
+        self.z = 0
+        self.wx = 1e-6
+        self.wy = 1e-6
+        self.wz = 1e-6
+        self.material = "<Object defined dielectric>"
+        self.index = 2.4
+
+        # Update properties with any provided keyword arguments
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    def add_to_sim(self, sim):
+        waveguide_properties = OrderedDict([("x", self.x),
+                           ("y", self.y),
+                           ("z", self.z),
+                           ("x span", self.wx),
+                           ("y span", self.wy),
+                           ("z span", self.wz),
+                           ("material", self.material),
+                           ("index", self.index),
+                           ('name', self.name)])
+
+        sim.addrect(properties=waveguide_properties)
          
