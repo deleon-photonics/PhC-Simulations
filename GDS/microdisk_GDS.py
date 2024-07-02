@@ -110,7 +110,7 @@ def make_gap_sweep(grating, taper, disk_r, coupler_width, gap_list, layer):
         xspan = bbox[1][0] - bbox[0][0]
         coupler_ref = gdspy.CellReference(coupler, (x, 0))
         gap_sweep_cell.add(coupler_ref)
-        x = x + 2*xspan
+        x = x + pattern_x_spacing
     
     return gap_sweep_cell
 
@@ -124,7 +124,7 @@ def make_gap_and_radius_sweep(grating, taper, radius_list, coupler_width, gap_li
         yspan = bbox[1][1] - bbox[0][1]
         gap_sweep_ref = gdspy.CellReference(gap_sweep, (0, y))
         radius_sweep_cell.add(gap_sweep_ref)
-        y = y + 2*yspan
+        y = y + pattern_y_spacing
     
     return radius_sweep_cell
 
@@ -144,17 +144,19 @@ def positive_tone(cell):
 
 
 #Instantiate fixed objects
-coupler_w = 0.5
-coupler_gap = 0.3
-disk_r = 25
-gap_list = [0.1, 0.2, 0.3]
+coupler_w = 0.525
+gap_list = [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
 radius_list = [20, 25, 30]
+
+#Pattern spacings
+pattern_x_spacing = 100
+pattern_y_spacing = 90
 
 use_positive_tone = 1   #If using positive tone resist
 border_size = 5 #Size of the border around the patterns when flipping tone
 
-grating_coupler = grating(period=1.0, duty_cycle = 0.3, num_gratings = 5)
-grating_taper = taper(start_width = coupler_w, end_width = 5, length = 10)
+grating_coupler = grating(period=1.1, duty_cycle = 0.325, num_gratings = 5, width = 8)
+grating_taper = taper(start_width = coupler_w, end_width = 3, length = 10)
 
 lib = gdspy.GdsLibrary()
 
