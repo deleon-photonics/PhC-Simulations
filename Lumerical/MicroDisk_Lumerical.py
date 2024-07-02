@@ -885,14 +885,41 @@ def Ncav_Nmir_Sweep(cavity_parameters, num_cav_hole_list, num_mir_hole_list):
 
 run_date = date.today()
 
-wavelength = 1549e-9
+wavelength = 1550e-9
 
-sr.rectangular_grating_sim(grating_width=2e-6, grating_thickness=500e-9, period=1e-6, duty_cycle=0.3, num_gratings=10, material_index=2.3682, objective_NA=0.65,
+start_w = 500e-9
+end_widths = np.linspace(3e-6, 5e-6, 5)
+taper_lengths = np.linspace(5e-6, 30e-6, 6)
+Tin = np.zeros((len(end_widths), len(taper_lengths)))
+
+for i in range(len(end_widths)):
+    for j in range(len(taper_lengths)):
+        Tin[i,j] = sr.linear_taper_sim(start_width=start_w, end_width=end_widths[i], taper_length=taper_lengths[j],
+                            thickness=500e-9,material_index=2.3682, wavelength=wavelength)
+        results = {'wavelength'     : wavelength,
+                    'start width'   : start_w,
+                    'end widths'    : end_widths,
+                    "taper lengths" : taper_lengths,
+                    "Tin"           : Tin}
+
+        with open(str(run_date)+"_taper_sweep.p", "wb") as f:
+                pickle.dump(results, f)
+        scipy.io.savemat(str(run_date)+"_taper_sweep.mat", results)
+
+for i in range(len(end_widths)):
+    plt.plot(taper_lengths*1e6, Tin[i,:], label='Width = ' + str(end_widths[i]*1e9) + "nm")    
+plt.xlabel('Taper Length (um)')
+plt.ylabel('T in')
+plt.legend()
+plt.savefig(str(run_date)+"_Taper_sweep.png")
+plt.close()
+
+""" sr.rectangular_grating_sim(grating_width=2e-6, grating_thickness=500e-9, period=1e-6, duty_cycle=0.3, num_gratings=10, material_index=2.3682, objective_NA=0.65,
                            wavelength=wavelength)
 
-periods = np.linspace(500e-9, 2000e-9, 31)
-dcs = np.linspace(0.1, 0.9, 17)
-widths = np.linspace(1e-6, 9e-6, 5)
+periods = np.linspace(1050e-9, 1150e-9, 5)
+dcs = np.linspace(0.275, 0.375, 5)
+widths = np.linspace(3e-6, 5e-6, 5)
 
 for width in widths:
     Ttotal = np.zeros((len(periods), len(dcs)))
@@ -927,7 +954,7 @@ for width in widths:
     plt.title('Width = ' + str(width*1e9) + "nm")
     plt.savefig(str(run_date)+"_width_" + str(int(width*1e9)) + "nm_Period_DC_sweep.png")
     plt.close()
-
+ """
 
 """ coupler_widths = np.linspace(400e-9, 800e-9, 17)
 coupler_gaps = np.linspace(100e-9, 500e-9, 17)

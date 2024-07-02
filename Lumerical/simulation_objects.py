@@ -579,3 +579,31 @@ class waveguide:
 
         sim.addrect(properties=waveguide_properties)
          
+class polygon:
+    def __init__(self, **kwargs):
+        self.name = "polygon"
+        self.x = 0
+        self.y = 0
+        self.z = 0
+        self.zspan = 1e-6
+        self.vertices = [[0, 0], [1, 0], [0.5, 1]]
+        self.material = "<Object defined dielectric>"
+        self.index = 2.4
+
+        # Update properties with any provided keyword arguments
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    def add_to_sim(self, sim):
+        taper_props = OrderedDict([("x", self.x),
+                           ("y", self.y),
+                           ("z", self.z),
+                           ("z span", self.zspan),
+                           ("material", self.material),
+                           ("index", self.index),
+                           ('name', self.name)])
+
+        sim.addpoly(properties=taper_props)
+        sim.set("vertices", self.vertices)
+         
