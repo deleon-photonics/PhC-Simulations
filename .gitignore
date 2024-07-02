@@ -5,3 +5,5 @@
 *.mat
 *.p
 *.pyc
+*.svg
+*.gds
