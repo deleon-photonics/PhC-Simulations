@@ -568,6 +568,90 @@ def microdisk_coupler(disk_radius, disk_thickness, material_index, coupler_width
         print(e)
         return -1
 
+def linear_taper_sim(start_width, end_width, 
+                        taper_length, thickness, 
+                        material_index, 
+                        wavelength):
+    
+    sim = lp.FDTD(hide=True)
+
+    #output_folder = "grating_width_" + str(int(grating_width*1e9)) + "nm_period_" + str(int(period*1e9)) + "nm_duty_cycle_" + str(int(duty_cycle*100))
+    #os.makedirs(output_folder, exist_ok=True)
+
+    sim.setglobalsource("wavelength start", wavelength)
+    sim.setglobalsource("wavelength stop", wavelength)
+    sim.setglobalmonitor("wavelength center", wavelength)
+    sim.setglobalmonitor("wavelength span", 0)
+
+    fdtd = so.FDTD(yspan = end_width + 2*wavelength,
+                   xspan = taper_length + 4e-6,
+                   zspan = thickness + 2*wavelength,
+                   x = taper_length/2,
+                   dimension = "3D",
+                   sim_time = 2e-12,
+                   xmin_bc = 'PML',
+                   ymin_bc = 'anti-symmetric',
+                   zmin_bc = 'symmetric',
+                   mesh_accuracy = 3)
+    fdtd.add_to_sim(sim)
+
+    #Input waveguide
+    input_waveguide = so.waveguide(x = -1.5e-6,
+                                    y = 0,
+                                    z = 0,
+                                    wx = 3e-6,
+                                    wy = start_width,
+                                    wz = thickness,
+                                    index = material_index)   
+    input_waveguide.add_to_sim(sim)
+
+    #Taper
+    taper_vertices = np.array([(0, -start_width/2), (0, start_width/2), 
+                               (taper_length, end_width/2), (taper_length, -end_width/2)])
+    taper = so.polygon(x = 0, y = 0, z = 0,
+                        vertices = taper_vertices,
+                        zspan = thickness,
+                        index = material_index)
+    taper.add_to_sim(sim)
+
+    #Output waveguide
+    output_waveguide = so.waveguide(x = taper_length + 1.5e-6,
+                                    y = 0,
+                                    z = 0,
+                                    wx = 3e-6,
+                                    wy = end_width,
+                                    wz = thickness,
+                                    index = material_index,
+                                    name = 'output waveguide')
+    output_waveguide.add_to_sim(sim)
+
+    #Input port
+    input_port = so.port(name = 'Input', x = -1e-6, y = 0, z = 0,
+                          yspan = start_width + wavelength, 
+                          zspan = 1.5*wavelength)
+    input_port.add_to_sim(sim)
+
+    #Thru port
+    thru_port = so.port(name = 'Thru', x = taper_length + 1e-6, y = 0, z = 0,
+                          yspan = fdtd.yspan - 500e-9, zspan = 1.5*wavelength)
+    thru_port.add_to_sim(sim)
+
+    if os.path.isfile('gui.fps'):
+        os.remove('gui.fsp')
+    sim.save('gui.fsp')
+    
+    try:
+        sim.run()
+        outport_result = sim.getresult(thru_port.get_name(), 'expansion for port monitor')
+        T = outport_result['T_in'][0][0]
+
+        print(T)
+        return T
+    
+    except Exception as e:
+        print(e)
+        return -1
+
 def rectangular_grating_sim(grating_width, grating_thickness, 
                             period, duty_cycle, 
                             num_gratings,
@@ -618,12 +702,12 @@ def rectangular_grating_sim(grating_width, grating_thickness,
 
     #Input port
     input_port = so.port(name = 'Input', x = -1e-6, y = 0, z = 0,
-                          yspan = 1.5*wavelength, zspan = 1.5*wavelength)
+                          yspan = fdtd.yspan - 500e-9, zspan = 1.5*wavelength)
     input_port.add_to_sim(sim)
 
     #Thru port
     thru_port = so.port(name = 'Thru', x = num_gratings*period - wavelength, y = 0, z = 0,
-                          yspan = 1.5*wavelength, zspan = 1.5*wavelength)
+                          yspan = fdtd.yspan - 500e-9, zspan = 1.5*wavelength)
     thru_port.add_to_sim(sim)
 
     #Vertical port
