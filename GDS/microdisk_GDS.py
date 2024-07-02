@@ -26,8 +26,16 @@ class grating:
 
 def make_taper(taper, layer):
     taper_cell = lib.new_cell('taper' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10)))
-    vertices = [(0, -taper.start_width/2), (0, taper.start_width/2),
-                (taper.length, taper.end_width/2), (taper.length, -taper.end_width/2)]
+    if use_positive_tone == 1:
+        vertices = [(0, -taper.start_width/2), (0, taper.start_width/2),
+                    (taper.length, taper.end_width/2), 
+                    (taper.length, taper_support_width/2), (taper.length + taper_support_length, taper_support_width/2), 
+                    (taper.length + taper_support_length, -taper_support_width/2), (taper.length, -taper_support_width/2),
+                    (taper.length, -taper.end_width/2)]
+    else:
+        vertices = [(0, -taper.start_width/2), (0, taper.start_width/2),
+                    (taper.length, taper.end_width/2), 
+                    (taper.length, -taper.end_width/2)]
     taper = gdspy.Polygon(points=vertices, layer=layer)
     taper_cell.add(taper)
     
@@ -35,11 +43,18 @@ def make_taper(taper, layer):
 
 def make_grating(grating, layer):
     grating_cell = lib.new_cell('grating' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10)))
-    x = grating.period*(1-grating.duty_cycle)
+    x = grating.period*(1-grating.duty_cycle) + taper_support_length
     for i in range(grating.num_gratings):
         rect = gdspy.Rectangle((x, -grating.width/2), (x + grating.period*grating.duty_cycle, grating.width/2), layer=layer)
         x = x + grating.period
         grating_cell.add(rect)
+
+    if use_positive_tone == 1:
+        top_rec = gdspy.Rectangle((0, grating.width/2), (x, grating.width/2 + grating_edge_support))
+        bot_rec = gdspy.Rectangle((0, -grating.width/2), (x, -grating.width/2 - grating_edge_support))
+        x = x-grating.period
+        back_support = gdspy.Rectangle((x, -grating.width/2), (x + 10, grating.width/2))
+        grating_cell.add([back_support, top_rec, bot_rec])
     
     return grating_cell
 
@@ -92,8 +107,8 @@ def make_gap_sweep(grating, taper, disk_r, coupler_width, gap_list, layer):
     label_xspan = label_bbox[1][0] - label_bbox[0][0]
     label_yspan = label_bbox[1][1] - label_bbox[0][1]
     
-    if use_positive_tone == 1:
-        label_cell = positive_tone(label_cell)
+    #if use_positive_tone == 1:
+    #    label_cell = positive_tone(label_cell)
     label_ref = gdspy.CellReference(label_cell, (-4*disk_r - label_xspan/2, disk_r - label_yspan))
     gap_sweep_cell.add(label_ref)
 
@@ -110,7 +125,7 @@ def make_gap_sweep(grating, taper, disk_r, coupler_width, gap_list, layer):
         xspan = bbox[1][0] - bbox[0][0]
         coupler_ref = gdspy.CellReference(coupler, (x, 0))
         gap_sweep_cell.add(coupler_ref)
-        x = x + 2*xspan
+        x = x + pattern_x_spacing
     
     return gap_sweep_cell
 
@@ -124,7 +139,7 @@ def make_gap_and_radius_sweep(grating, taper, radius_list, coupler_width, gap_li
         yspan = bbox[1][1] - bbox[0][1]
         gap_sweep_ref = gdspy.CellReference(gap_sweep, (0, y))
         radius_sweep_cell.add(gap_sweep_ref)
-        y = y + 2*yspan
+        y = y + pattern_y_spacing
     
     return radius_sweep_cell
 
@@ -144,17 +159,23 @@ def positive_tone(cell):
 
 
 #Instantiate fixed objects
-coupler_w = 0.5
-coupler_gap = 0.3
-disk_r = 25
-gap_list = [0.1, 0.2, 0.3]
+coupler_w = 0.525
+gap_list = [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
 radius_list = [20, 25, 30]
+
+#Pattern spacings
+pattern_x_spacing = 100
+pattern_y_spacing = 90
+
 
 use_positive_tone = 1   #If using positive tone resist
 border_size = 5 #Size of the border around the patterns when flipping tone
+taper_support_width = 8
+taper_support_length = 1.05
+grating_edge_support = 1
 
-grating_coupler = grating(period=1.0, duty_cycle = 0.3, num_gratings = 5)
-grating_taper = taper(start_width = coupler_w, end_width = 5, length = 10)
+grating_coupler = grating(period=1.05, duty_cycle = 0.7, num_gratings = 6, width = 8)
+grating_taper = taper(start_width = coupler_w, end_width = 3, length = 10)
 
 lib = gdspy.GdsLibrary()
 
