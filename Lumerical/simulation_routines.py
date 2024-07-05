@@ -12,6 +12,7 @@ from scipy.optimize import curve_fit
 from scipy.constants import c
 import random
 import string
+import pandas as pd
 
 
 # Fit each peak with a Lorentzian or Gaussian function
@@ -49,8 +50,22 @@ def fit_Q(freqs, Esq):
 
     return Q_factors, res_wvls, peaks
 
-def compute_fft(E, dt, pad_factor=1):
+def mode_overlap_calculator(E1, E2):
+    Ex1, Ey1, Ez1 = E1[:,:,0], E1[:,:,1], E1[:,:,2]
+    Ex2, Ey2, Ez2 = E2[:,:,0], E2[:,:,1], E2[:,:,2]
+    E1_E2 = Ex1 * np.conj(Ex2) + Ey1 * np.conj(Ey2) + Ez1 * np.conj(Ez2)
+    numerator = np.abs(np.trapz(np.trapz(E1_E2, axis=0), axis=0))**2
+    E1_sq = np.abs(Ex1)**2 + np.abs(Ey1)**2 + np.abs(Ez1)**2
+    E2_sq = np.abs(Ex2)**2 + np.abs(Ey2)**2 + np.abs(Ez2)**2
+    denominator = (np.trapz(np.trapz(E1_sq, axis = 0), axis=0))*(np.trapz(np.trapz(E2_sq, axis = 0), axis=0))
+    overlap = numerator/denominator
+    return overlap
+
+def compute_fft(E, dt, pad_factor=1, window_func = None):
     N = len(E)
+    if window_func is not None:
+        window = window_func(N)
+        E = E * window
     N_padded = N*pad_factor
     E_padded = np.pad(E, (0, N_padded - N), mode='constant')  # Pad with zeros
     E_fft = np.fft.fft(E_padded)
@@ -62,11 +77,11 @@ def compute_fft(E, dt, pad_factor=1):
 
 #Microdisk resonances
 def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength, wavelength_span,
-                         sub_disk = 0, sub_disk_radius = 0):
+                         sub_disk = 0, sub_disk_radius = 0, mesh_setting = 1):
     
     sim = lp.FDTD(hide=True)
 
-    output_folder = "r_" + str(int(disk_radius*1e9)) + "nm_t_" + str(int(disk_thickness*1e9)) + "nm"
+    output_folder = "r_" + str(int(math.ceil(disk_radius*1e9))) + "nm_t_" + str(int(math.ceil(disk_thickness*1e9))) + "nm"
     FDTD_zmin_BC = "symmetric"
     if sub_disk == 1:
         subdisk = so.microdisk(thickness = disk_thickness/2 + wavelength,
@@ -97,13 +112,13 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
         dipole_angle = 0
     fdtd = so.FDTD(xspan = disk_radius*2 + 2*wavelength, 
                    yspan = disk_radius*2 + 2*wavelength, 
-                   zspan = disk_thickness + 2*wavelength, 
+                   zspan = disk_thickness + wavelength, 
                    dimension = dimension, 
-                   sim_time = 6e-12,
+                   sim_time = 20e-12,
                    xmin_bc = 'symmetric',
                    ymin_bc = 'anti-symmetric',
                    zmin_bc = FDTD_zmin_BC,
-                   mesh_accuracy = 3)
+                   mesh_accuracy = mesh_setting)
     fdtd.add_to_sim(sim)
 
     theta = 25
@@ -120,8 +135,45 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
     y = np.sin(theta*np.pi/180)*(disk_radius - wavelength/8)
     time_monitor = so.time_monitor(x=x, y = y, z = 5e-9, start_time = 500e-15, min_sampling = 100)
     time_monitor.add_to_sim(sim)
+
+    theta = 45
+    x = np.cos(theta*np.pi/180)*(disk_radius - wavelength/16 - 5e-9)
+    y = np.sin(theta*np.pi/180)*(disk_radius - wavelength/16 - 5e-9)
+    Qanalysis = so.Qanalysis(x=x, y=y, z=wavelength/32+5e-9, 
+                            xspan = wavelength/8, yspan = wavelength/8, zspan = wavelength/16,
+                            nx=2, ny=2, nz = 2,
+                            fmin = c/(wavelength + wavelength_span/2), fmax = c/(wavelength-wavelength_span/2),
+                            start_time = 500e-15)
+
+    Qanalysis.add_to_sim(sim)
+
+    XY_DFT_monitor = so.DFT_monitor(type='2D Z-normal',
+                                    source_limits = 0,
+                                    x=0, y=0, z = 5e-9, 
+                                    xspan = fdtd.xspan, 
+                                    yspan = fdtd.yspan,
+                                    num_freqs = 200, 
+                                    wvl_center = wavelength, wvl_span = wavelength_span,
+                                    apodization = 'full',
+                                    apodization_center = 10000e-15,
+                                    apodization_width = 5000e-15)
+    XY_DFT_monitor.add_to_sim(sim)
+
+    XZ_DFT_monitor = so.DFT_monitor(type='2D Y-normal',
+                                source_limits = 0,
+                                x=0, y=5e-9, z = 0e-9, 
+                                xspan = fdtd.xspan, 
+                                zspan = fdtd.zspan,
+                                num_freqs = 200, 
+                                wvl_center = wavelength, wvl_span = wavelength_span,
+                                apodization = 'full',
+                                apodization_center = 10000e-15,
+                                apodization_width = 5000e-15)
+    XZ_DFT_monitor.add_to_sim(sim)
     
-    mesh = so.mesh(xspan = 2*disk_radius, yspan = 2*disk_radius)
+    mesh = so.mesh(x = 0, y = 0, z = 0,
+                    xspan = fdtd.xspan, yspan = fdtd.yspan, zspan = disk_thickness + wavelength/2,
+                    x_resolution = 60e-9, y_resolution = 60e-9, z_resolution = 60e-9)
     #mesh.add_to_sim(sim)
 
     if os.path.isfile('gui.fps'):
@@ -139,9 +191,9 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
         Ez = E_time[:,2]
         dt = t[1] - t[0]
 
-        freqs_x, E_fft_x = compute_fft(Ex, dt, 100)
-        freqs_y, E_fft_y = compute_fft(Ey, dt, 100)
-        freqs_z, E_fft_z = compute_fft(Ez, dt, 100)
+        freqs_x, E_fft_x = compute_fft(Ex, dt, 100, window_func=np.hanning)
+        freqs_y, E_fft_y = compute_fft(Ey, dt, 100, window_func=np.hanning)
+        freqs_z, E_fft_z = compute_fft(Ez, dt, 100, window_func=np.hanning)
 
         E_fft_combined = np.sqrt(np.abs(E_fft_x)**2 + np.abs(E_fft_y)**2 + np.abs(E_fft_z)**2)
         E_power_spectrum = E_fft_combined**2
@@ -150,11 +202,11 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
         with np.errstate(divide='ignore', invalid='ignore'):
             wvls = np.where(freqs != 0, c / freqs, np.inf)  # Avoid divide by zero
 
-        peaks,_ = find_peaks(E_power_spectrum, height=0.02, distance=1) #
+        peaks,_ = find_peaks(E_power_spectrum, height=0.001, distance=1) #
         all_res_wvls = wvls[peaks]
-        res_wvls = np.array(all_res_wvls[np.abs(all_res_wvls - wavelength) < wavelength_span])
-        closest_res_wvl = all_res_wvls[np.argmin(np.abs(all_res_wvls - wavelength))]
-
+        res_wvls = np.array(all_res_wvls[np.abs(all_res_wvls - wavelength) < wavelength_span/2])
+        res_freqs = np.array(c / res_wvls)
+        delta_f = np.array([res_freqs[i+1] - res_freqs[i] for i in range(len(res_freqs) - 1)])
         plt.figure()
         plt.plot(wvls, E_power_spectrum)
         plt.scatter(all_res_wvls, E_power_spectrum[peaks], c='red')
@@ -165,63 +217,172 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
         plt.savefig(os.path.join(output_folder, 'FFT.png'))
         plt.close()
         
+        res_freqs_df = []
+        for i in range(len(delta_f)):
+            res_freqs_df.append(res_freqs[i] + delta_f[i]/2)
+        res_freqs_df = np.array(res_freqs_df)
+        plt.figure()
+        plt.scatter(1e9*c/res_freqs_df, delta_f/1e9)
+        plt.ylabel('Resonance FSR (GHz)')
+        plt.xlabel('Center Wavelength (nm)')
+        #plt.xlim((1500e-9, 1600e-9))
+        plt.savefig(os.path.join(output_folder, 'FSR_vs_resNum.png'))
+        plt.close()
 
-        if len(res_wvls) == 0:
-            res_wvls = np.array([closest_res_wvl])
+        XZ_field_profile_data =  sim.getresult(XZ_DFT_monitor.get_name(), 'E')
+        E_XZ = XZ_field_profile_data['E'] #E = E[x, y, z, frequency, polarization]
+        XZ_DFT_wvls = XZ_field_profile_data['lambda']
+        XZ_DFT_x = XZ_field_profile_data['x']
+        XZ_DFT_z = XZ_field_profile_data['z']
 
-        if len(res_wvls) > 0:
-            sim.switchtolayout()
-
-            theta = 45
-            x = np.cos(theta*np.pi/180)*(disk_radius - wavelength/16 - 5e-9)
-            y = np.sin(theta*np.pi/180)*(disk_radius - wavelength/16 - 5e-9)
-            Qanalysis = so.Qanalysis(x=x, y=y, z=wavelength/32+5e-9, 
-                                    xspan = wavelength/8, yspan = wavelength/8, zspan = wavelength/16,
-                                    nx=2, ny=2, nz = 2,
-                                    fmin = c/(np.max(res_wvls) + wavelength_span/2), fmax = c/(np.min(res_wvls)-wavelength_span/2),
-                                    start_time = 500e-15)
-
-            Qanalysis.add_to_sim(sim)
-
-            sim.run()
-            try:
-                sim.runanalysis()
-                Qvals = sim.getresult(Qanalysis.get_name(), 'Q')
-                Q = Qvals['Q']
-                Q_res_wvls = Qvals['lambda']
-
-                plt.figure(figsize=(8, 6))
-                plt.plot(Q_res_wvls*1e9, Q, 'o')
-                plt.xlabel('resonance wavelength (nm)')
-                plt.ylabel('Q')
-                plt.grid(True)
-                plt.yscale('log')
-                plt.savefig(os.path.join(output_folder, 'Q_vs_wvl.png'))
-                plt.close()     
+        field_profile_data = sim.getresult(XY_DFT_monitor.get_name(), 'E')
+        E_XY = field_profile_data['E'] #E = E[x, y, z, frequency, polarization]
+        XY_DFT_freqs = field_profile_data['f']
+        XY_DFT_wvls = field_profile_data['lambda']
+        XY_DFT_x = field_profile_data['x']
+        XY_DFT_y = field_profile_data['y']
+        x0 = np.argmin(np.abs(XY_DFT_x))
+        y0 = np.argmin(np.abs(XY_DFT_y))
+        x_pos = XY_DFT_x[x0+20:-20]
+        y_pos = XY_DFT_y[y0+20:-20]
+        decay_lengths = np.zeros_like(res_wvls)
         
-                Q_res_wvls = np.append(res_wvls, Q_res_wvls)
-                Q_res_wvls = np.unique(Q_res_wvls)
-            except Exception as e:
-                print(f"Error: {e}")
+        mode_overlap = np.zeros_like(delta_f)
+        #Mode Overlap
+        for i in range(len(res_wvls)-1):
+            res1 = res_wvls[i]
+            res2 = res_wvls[i+1]
 
-            Q_res_wvls = res_wvls
-            sim.switchtolayout()
-            DFT_monitor_list = [None] * len(Q_res_wvls)
-            for i in range(len(Q_res_wvls)):
-                res = Q_res_wvls[i]
-                DFT_monitor_list[i] = so.DFT_monitor(type='2D Z-normal',
-                                            source_limits = 0,
-                                            x=0, 
-                                            y=0,
-                                            z = 5e-9, 
-                                            xspan = disk_radius*2 + 1.5e-6, 
-                                            yspan = disk_radius*2 + 1.5e-6,
-                                            num_freqs = 1, 
-                                            wvl_center = res, 
-                                            apodization = 'full',
-                                            apodization_center = 3500e-15,
-                                            apodization_width = 2000e-15)
-                DFT_monitor_list[i].add_to_sim(sim)
+            ind1 = np.argmin(np.abs(XY_DFT_wvls - res1))
+            ind2 = np.argmin(np.abs(XY_DFT_wvls - res2))
+
+            Exz_1 =  E_XZ[:,0,:,ind1,:]
+            Exz_2 =  E_XZ[:,0,:,ind2,:]
+            mode_overlap[i] = mode_overlap_calculator(np.conj(Exz_1), Exz_2)
+
+        plt.figure()
+        plt.scatter(1e9*c/res_freqs_df, mode_overlap)
+        plt.ylabel('Mode Overlap')
+        plt.xlabel('Center Wavelength (nm)')
+        #plt.xlim((1500e-9, 1600e-9))
+        plt.savefig(os.path.join(output_folder, 'Overlap_vs_resNum.png'))
+        plt.close()
+
+        plt.figure()
+        plt.scatter(mode_overlap, delta_f/1e9)
+        plt.ylabel('Resonance FSR (GHz)')
+        plt.xlabel('Mode Overlap [0 to 1]')
+        #plt.xlim((1500e-9, 1600e-9))
+        plt.savefig(os.path.join(output_folder, 'FSR_vs_Overlap.png'))
+        plt.close()
+
+        i = 0
+        for res_wvl in res_wvls:
+            closest_index = np.argmin(np.abs(XY_DFT_wvls - res_wvl))
+            
+            Exz =  E_XZ[:,0,:,closest_index,:]
+            Exz_sq = np.abs((np.sum(Exz * np.conjugate(Exz), axis = 2)))
+
+            plt.figure(figsize=(8, 6))
+            plt.imshow(np.transpose(Exz_sq), extent=[np.min(XZ_DFT_x), np.max(XZ_DFT_x), np.min(XZ_DFT_z), np.max(XZ_DFT_z)], origin='lower', cmap='viridis', aspect='auto')
+            rect = plt.Rectangle((-disk_radius, -disk_thickness/2), 2*disk_radius, disk_thickness, fill=False, edgecolor='red', linestyle='--')
+            plt.gca().add_patch(rect)
+            plt.xlim(XZ_DFT_x.min(), XZ_DFT_x.max())
+            plt.ylim(XZ_DFT_z.min(), XZ_DFT_z.max())
+            plt.colorbar(label='Magnitude')  # Add a color bar to show the magnitude scale
+            plt.xlabel('X ')
+            plt.ylabel('Z ')
+            plt.title('|E|^2')
+            plt.savefig(os.path.join(output_folder, 'Esq_XZ_' + str(int(XY_DFT_wvls[closest_index]*1e9)) + 'nm_.png'))
+            plt.close()
+            
+            E = E_XY[:,:,0,closest_index,:]
+            E_sq = np.abs((np.sum(E * np.conjugate(E), axis = 2)))
+            sliced_E_sq = E_sq[x0+20:-20, y0+20:-20]
+            max = 0
+            for j in range(0, len(x_pos)):
+                for k in range(0, len(y_pos)):
+                    if sliced_E_sq[j, k] > max:
+                        max =  sliced_E_sq[j, k]
+                        max_index_sliced = (j, k)
+            sliced_E_sq = sliced_E_sq / max
+            max_x = x_pos[max_index_sliced[1]]
+            max_y = y_pos[max_index_sliced[0]]
+            tangent_slope = -max_x / max_y
+            perpendicular_slope = -1 / tangent_slope
+            x1 = x_pos[0]
+            y1 = max_y + perpendicular_slope *(x1 - max_x)
+            x2 = x_pos[-1]
+            y2 = max_y + (x2-max_x)*perpendicular_slope
+            
+            plt.figure(figsize=(8, 6))
+            plt.imshow(E_sq, extent=[np.min(XY_DFT_x), np.max(XY_DFT_x), np.min(XY_DFT_y), np.max(XY_DFT_y)], origin='lower', cmap='viridis', aspect='auto')
+            plt.plot([x1, x2], [y1, y2], 'r--')  # Plotting dashed line using indices
+            circle = plt.Circle((0, 0), disk_radius, color='red', fill=False, linestyle='--')
+            plt.gca().add_artist(circle)
+            plt.xlim(XY_DFT_x.min(), XY_DFT_x.max())
+            plt.ylim(XY_DFT_y.min(), XY_DFT_y.max())
+            plt.colorbar(label='Magnitude')  # Add a color bar to show the magnitude scale
+            plt.xlabel('X ')
+            plt.ylabel('Y ')
+            plt.title('|E|^2')
+            plt.savefig(os.path.join(output_folder, 'Esq_' + str(int(XY_DFT_wvls[closest_index]*1e9)) + 'nm_.png'))
+            plt.close()
+            
+            E_1d = []
+            y_1d = []
+            r_1d = []
+            yvals = max_y + (x_pos - max_x)*perpendicular_slope
+            for j in range(len(x_pos)):
+                yind = np.argmin(np.abs(y_pos - yvals[j]))
+                E_1d.append(sliced_E_sq[yind, j])
+                y_1d.append(XY_DFT_y[yind])
+                r_1d.append(np.sqrt(x_pos[j]**2 + y_pos[yind]**2))
+            threshold = 0.01
+            for l, value in enumerate(E_1d):
+                if value > threshold:
+                    index = l
+                    break
+            
+            plt.figure(figsize=(8, 6))
+            plt.plot(r_1d, E_1d, label='|E|^2 vs radial length')
+            plt.axvline(x=disk_radius, color='r', linestyle='--')
+            plt.xlabel('r (um)')
+            plt.ylabel('|E|^2')
+            plt.title(f"99pcnt field decay length: {(disk_radius - r_1d[index])*1e6} um")
+            plt.xlim((0, disk_radius*3))
+            plt.legend()
+            plt.grid(True)
+            plt.savefig(os.path.join(output_folder, 'E_1D_' + str(int(XY_DFT_wvls[closest_index]*1e9)) + 'nm_.png'))
+            plt.close()
+            decay_lengths[i] = disk_radius - r_1d[index]
+          
+            i = i + 1
+
+        try:
+            
+            sim.runanalysis()
+            Qvals = sim.getresult(Qanalysis.get_name(), 'Q')
+            Q = Qvals['Q']
+            Q_res_wvls = Qvals['lambda']
+            Q = Q.flatten()
+            Q_res_wvls = Q_res_wvls.flatten()
+            plt.figure(figsize=(8, 6))
+            plt.plot(Q_res_wvls*1e9, Q, 'o')
+            plt.xlabel('resonance wavelength (nm)')
+            plt.ylabel('Q')
+            plt.grid(True)
+            plt.yscale('log')
+            plt.savefig(os.path.join(output_folder, 'Q_vs_wvl.png'))
+            plt.close()     
+            
+
+        except Exception as e:
+            print(f"Error: {e}")
+        
+
+        """
+                
             
             theta = 55
             x = np.cos(theta*np.pi/180)*(disk_radius - wavelength/8)
@@ -233,83 +394,6 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
             DFT_monitor.add_to_sim(sim)
 
             sim.run()
-
-            decay_lengths = np.zeros_like(Q_res_wvls)
-            i = 0
-            for field_profile in DFT_monitor_list:
-                field_profile_data = sim.getresult(field_profile.get_name(), 'E')
-                E_ = field_profile_data['E']
-                E = E_[:,:,0,0,:]
-                x = field_profile_data['x']
-                y = field_profile_data['y']
-                E_sq = np.abs((np.sum(E * np.conjugate(E), axis = 2)))
-
-                x0 = np.argmin(np.abs(x))
-                y0 = np.argmin(np.abs(y))
-
-                x_pos = x[x0+20:-20]
-                y_pos = y[y0+20:-20]
-
-                sliced_E_sq = E_sq[x0+20:-20, y0+20:-20]
-                
-                max = 0
-                for j in range(0, len(x_pos)):
-                    for k in range(0, len(y_pos)):
-                        if sliced_E_sq[j, k] > max:
-                            max =  sliced_E_sq[j, k]
-                            max_index_sliced = (j, k)
-                sliced_E_sq = sliced_E_sq / max
-                max_x = x_pos[max_index_sliced[1]]
-                max_y = y_pos[max_index_sliced[0]]
-
-                tangent_slope = -max_x / max_y
-                perpendicular_slope = -1 / tangent_slope
-                x1 = x_pos[0]
-                y1 = max_y + perpendicular_slope *(x1 - max_x)
-                x2 = x_pos[-1]
-                y2 = max_y + (x2-max_x)*perpendicular_slope
-
-                plt.figure(figsize=(8, 6))
-                plt.imshow(sliced_E_sq, extent=[np.min(x_pos), np.max(x_pos), np.min(y_pos), np.max(y_pos)], origin='lower', cmap='viridis', aspect='auto')
-                plt.plot([x1, x2], [y1, y2], 'r--')  # Plotting dashed line using indices
-                plt.xlim(x_pos.min(), x_pos.max())
-                plt.ylim(y_pos.min(), y_pos.max())
-                plt.colorbar(label='Magnitude')  # Add a color bar to show the magnitude scale
-                plt.xlabel('X axis')
-                plt.ylabel('Y axis')
-                plt.title('|E|^2')
-                plt.savefig(os.path.join(output_folder, 'Esq_' + str(int(Q_res_wvls[i]*1e9)) + 'nm_.png'))
-                plt.close()
-                
-                E_1d = []
-                y_1d = []
-                r_1d = []
-                yvals = max_y + (x_pos - max_x)*perpendicular_slope
-                for j in range(len(x_pos)):
-                    yind = np.argmin(np.abs(y_pos - yvals[j]))
-                    E_1d.append(sliced_E_sq[yind, j])
-                    y_1d.append(y[yind])
-                    r_1d.append(np.sqrt(x_pos[j]**2 + y_pos[yind]**2))
-                
-                threshold = 0.01
-                for l, value in enumerate(E_1d):
-                    if value > threshold:
-                        index = l
-                        break
-                plt.figure(figsize=(8, 6))
-                plt.plot(r_1d, E_1d, label='|E|^2 vs radial length')
-                plt.axvline(x=disk_radius, color='r', linestyle='--')
-                plt.xlabel('r (um)')
-                plt.ylabel('|E|^2')
-                plt.title(f"99pcnt field decay length: {(disk_radius - r_1d[index])*1e6} um")
-                plt.xlim((0, disk_radius*3))
-                plt.legend()
-                plt.grid(True)
-                plt.savefig(os.path.join(output_folder, 'E_1D_' + str(int(Q_res_wvls[i]*1e9)) + 'nm_.png'))
-                plt.close()
-                decay_lengths[i] = disk_radius - r_1d[index]
-
-                i = i + 1
 
             spectrum = sim.getresult(DFT_monitor.get_name(), 'E')
             E = spectrum['E'][0,0,0,:,:]
@@ -326,18 +410,25 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
             plt.ylabel('|E|^2')
             plt.grid(True)
             plt.savefig(os.path.join(output_folder, 'E_vs_wvl.png'))
-            plt.close()
+            plt.close() """
+        results = {'resonance_wavelengths'  : res_wvls,
+                    'Q_factors'             : Q,
+                    'Q_res_wvls'            : Q_res_wvls,
+                    'decay_lengths'         : decay_lengths,
+                    'wvl_XY'                : XY_DFT_wvls,
+                    'FFT'                   : E_power_spectrum,
+                    'FFT_wvl'               : wvls,
+                    'res_freqs'             : res_freqs,
+                    'delta_f'               : delta_f,
+                    'mode_overlap'          : mode_overlap}
 
-        results = {'resonance_wavelengths': res_wvls,
-                    'Q_factors' : Q,
-                    'Q_res_wvls': Q_res_wvls,
-                    'decay_lengths': decay_lengths,
-                    'Efield': Esq,
-                    'wvl': wvl,
-                    'Esq_time': E_power_spectrum,
-                    'wvl_time': wvls}
+                    #'E_XY'                  : E_sq,
+                    #'x_XY'                  : XY_DFT_x,
+                    #'y_XY'                  : XY_DFT_y,
+                    #'E_XZ'                  : E_XZ,
+                    #'x_XZ'                  : XZ_DFT_x,
+                    #'z_XZ'                  : XZ_DFT_z,
         
-
         with open(os.path.join(output_folder, 'output.p'), 'wb') as f:
             pickle.dump(results, f)
         scipy.io.savemat(os.path.join(output_folder, 'output.mat'), results)

@@ -264,6 +264,12 @@ class DFT_monitor:
         if self.type == '2D Z-normal':
             DFT_props.extend([('y span', self.yspan),
                               ('x span', self.xspan)])
+        elif self.type == '2D Y-normal':
+            DFT_props.extend([('z span', self.zspan),
+                              ('x span', self.xspan)])
+        elif self.type == '2D X-normal':
+            DFT_props.extend([('z span', self.zspan),
+                              ('y span', self.yspan)])
         DFT_props = OrderedDict(DFT_props)
         sim.addpower(properties = DFT_props)
 

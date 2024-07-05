@@ -887,7 +887,7 @@ run_date = date.today()
 
 wavelength = 1550e-9
 
-start_w = 500e-9
+""" start_w = 500e-9
 end_widths = np.linspace(3e-6, 5e-6, 5)
 taper_lengths = np.linspace(5e-6, 30e-6, 6)
 Tin = np.zeros((len(end_widths), len(taper_lengths)))
@@ -912,7 +912,7 @@ plt.xlabel('Taper Length (um)')
 plt.ylabel('T in')
 plt.legend()
 plt.savefig(str(run_date)+"_Taper_sweep.png")
-plt.close()
+plt.close() """
 
 """ sr.rectangular_grating_sim(grating_width=2e-6, grating_thickness=500e-9, period=1e-6, duty_cycle=0.3, num_gratings=10, material_index=2.3682, objective_NA=0.65,
                            wavelength=wavelength)
@@ -991,9 +991,9 @@ plt.close()
 
 #results = sr.microdisk_resonances(disk_radius=5.1e-6, disk_thickness=0, material_index=2.3682, wavelength=wavelength, wavelength_span=10e-9)
 
-""" disk_radii = [25e-6]#np.array([5, 7.5, 10, 15, 20])*1e-6
-thicknesses = [0.5e-6, 1e-6]#np.array([0.5e-6, 1e-6, 2e-6])
-sub_radii = [22e-6, 3e-6]
+disk_radii = np.array([10, 20, 30, 40, 50])*1e-6
+thicknesses = [0.25e-6, 0.5e-6, 0.75, 1e-6, 1.25e-6, 1.5e-6, 1.75e-6, 2e-6]#np.array([0.5e-6, 1e-6, 2e-6])
+sub_radii = [0]
 
 Q = []
 res_wvls = []
@@ -1001,20 +1001,29 @@ decay_lengths = []
 FSR = []
 rad = []
 thick = []
+min_FSR = []
+min_overlap = []
+mode_overlap = []
 
 for t in thicknesses:
     for r in disk_radii:
         for sub_r in sub_radii:
+            
             results  = sr.microdisk_resonances(disk_radius=r, 
                                                disk_thickness=t,
-                                               sub_disk=1, sub_disk_radius=sub_r, 
-                                               material_index=2.3682,  wavelength=wavelength, wavelength_span=50e-9)
+                                               sub_disk=0, sub_disk_radius=sub_r, 
+                                               material_index=2.3682,  wavelength=wavelength, wavelength_span=100e-9,
+                                               mesh_setting=2)
             if results != -1:
                 Q.append(results['Q_factors'])
                 res_wvls.append(results['resonance_wavelengths'])
                 decay_lengths.append(results['decay_lengths'])
                 rad.append(r)
                 thick.append(t)
+                FSR.append(results['delta_f'])
+                min_FSR.append(np.min(results['delta_f']))
+                mode_overlap.append(results['mode_overlap'])
+                min_overlap.append(results['mode_overlap'][np.argmin(results['delta_f'])])
 
             results = {'resonance_wavelengths': res_wvls,
                         'Q_factors' : Q,
@@ -1026,4 +1035,18 @@ for t in thicknesses:
             with open(str(run_date)+"_r_t_sweep_UndercutSweep.p", "wb") as f:
                 pickle.dump(results, f)
 
- """
+plt.scatter(rad, np.array(min_FSR)/1e9) #, norm=LogNorm()
+#plt.xlim(x_pos.min(), x_pos.max())
+#plt.ylim(y_pos.min(), y_pos.max())
+plt.xlabel('Coupler Radius')
+plt.ylabel('Min FSR (GHz)')
+plt.savefig('MinFSR_vs_R.png')
+plt.close()
+
+plt.scatter(min_overlap, np.array(min_FSR)/1e9) #, norm=LogNorm()
+#plt.xlim(x_pos.min(), x_pos.max())
+plt.ylim(0, 200)
+plt.xlabel('Mode Overlap')
+plt.ylabel('Min FSR (GHz)')
+plt.savefig('MinFSR_vs_Overlap.png')
+plt.close()
