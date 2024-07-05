@@ -1,2 +1,3 @@
-# Stimulated_Brillouin_Scattering
-Repository for Stimulated Brillouin Scattering 
+Repository for photonics simulations,
+de leon lab
+princeton university
