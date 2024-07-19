@@ -20,6 +20,8 @@ import scipy
 import simulation_objects as so
 import simulation_routines as sr
 
+from scipy.io import savemat
+
 
 
 #Simulation Functions
@@ -886,6 +888,28 @@ def Ncav_Nmir_Sweep(cavity_parameters, num_cav_hole_list, num_mir_hole_list):
 run_date = date.today()
 
 wavelength = 1550e-9
+n_dia = 2.3682
+
+wg_widths = np.linspace(100e-9, 2000e-9, 20)
+wg_heights = np.linspace(100e-9, 2000e-9, 20)
+
+nmodes = np.zeros((20,20))
+neff_1 = np.zeros((20,20))
+
+for i in range(len(wg_widths)):
+    for j in range(len(wg_heights)):
+        nmodes[i,j], neff_1[i,j] = sr.waveguide_mode_solver(wg_xspan=wg_widths[i], wg_yspan=wg_heights[j], wg_index=n_dia, wavelength=wavelength)
+
+        results = {'num_modes': nmodes,
+                    'neff_1' : neff_1,
+                    'wg_widths': wg_widths,
+                    "wg_heights": wg_heights}
+
+        with open(str(run_date)+"_wx_wy_wg_neff_sweep.p", "wb") as f:
+            pickle.dump(results, f)
+        
+        savemat(str(run_date)+"_wx_wy_wg_neff_sweep.mat", results)
+
 
 """ start_w = 500e-9
 end_widths = np.linspace(3e-6, 5e-6, 5)
@@ -987,12 +1011,9 @@ plt.title('Tc')
 plt.savefig('Tc.png')
 plt.close()
  """
-#S = sr.microdisk_coupler(disk_radius=25e-6, disk_thickness=500e-9, material_index=2.3682, coupler_width=750e-9, coupler_gap=200e-9, wavelength=wavelength)
 
-#results = sr.microdisk_resonances(disk_radius=5.1e-6, disk_thickness=0, material_index=2.3682, wavelength=wavelength, wavelength_span=10e-9)
-
-disk_radii = np.array([10, 20, 30, 40, 50])*1e-6
-thicknesses = [0.25e-6, 0.5e-6, 0.75, 1e-6, 1.25e-6, 1.5e-6, 1.75e-6, 2e-6]#np.array([0.5e-6, 1e-6, 2e-6])
+""" disk_radii = np.array([10, 20, 30, 40, 50])*1e-6
+thicknesses = [0.5e-6, 0.75e-6, 1e-6, 1.25e-6, 1.5e-6, 1.75e-6, 2e-6]#np.array([0.5e-6, 1e-6, 2e-6])
 sub_radii = [0]
 
 Q = []
@@ -1011,7 +1032,7 @@ for t in thicknesses:
             
             results  = sr.microdisk_resonances(disk_radius=r, 
                                                disk_thickness=t,
-                                               sub_disk=0, sub_disk_radius=sub_r, 
+                                               sub_disk=1, sub_disk_radius=r - 3e-6, 
                                                material_index=2.3682,  wavelength=wavelength, wavelength_span=100e-9,
                                                mesh_setting=2)
             if results != -1:
@@ -1049,4 +1070,4 @@ plt.ylim(0, 200)
 plt.xlabel('Mode Overlap')
 plt.ylabel('Min FSR (GHz)')
 plt.savefig('MinFSR_vs_Overlap.png')
-plt.close()
+plt.close() """

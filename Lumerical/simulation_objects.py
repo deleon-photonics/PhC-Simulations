@@ -63,6 +63,37 @@ class FDTD:
 
         sim.addfdtd(properties=fdtd_properties)
         
+class FDE:
+    def __init__(self, **kwargs):
+        self.x = 0
+        self.y = 0
+        self.xspan = 1e-6
+        self.yspan = 1e-6
+        self.max_bc = "PML"
+        self.xmin_bc = "PML"
+        self.ymin_bc = "PML"
+        self.wavelength = 1550e-9
+        self.ntrials = 10
+
+        # Update properties with any provided keyword arguments
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    def add_to_sim(self, sim):
+        fde_properties = OrderedDict([
+            ("x", self.x),
+            ("y", self.y),
+            ("x span", self.xspan),
+            ("y span", self.yspan),
+            ("x min bc", self.xmin_bc),
+            ("y min bc", self.ymin_bc),
+            ("x max bc", self.max_bc),
+            ("y max bc", self.max_bc),
+            ("wavelength", self.wavelength),
+            ("number of trial modes", self.ntrials)])
+
+        sim.addfde(properties=fde_properties)    
 
 #Mesh Object
 class mesh:

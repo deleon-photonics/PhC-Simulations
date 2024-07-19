@@ -75,7 +75,29 @@ def compute_fft(E, dt, pad_factor=1, window_func = None):
 
     return freqs, E_fft
 
-#Microdisk resonances
+def waveguide_mode_solver(wg_xspan, wg_yspan, wg_index, wavelength):
+    sim = lp.MODE(hide=True)
+    
+
+    fde = so.FDE(xspan = 3e-6, yspan = 3e-6, wavelength = wavelength)
+    fde.add_to_sim(sim)
+    #sim.setnamed("FDE", "wavelength", wavelength)
+    wg = so.waveguide(wx = wg_xspan, wy = wg_yspan, index =  wg_index)
+    wg.add_to_sim(sim)
+
+    mesh = so.mesh(xspan = 1.5*wg_xspan, yspan = 1.5*wg_yspan, x_resolution = 20e-9, y_resolution = 20e-9)
+    mesh.add_to_sim(sim)
+
+    sim.run()
+    num_modes = sim.findmodes()
+    if num_modes > 0:
+        neff_1 = sim.getresult("FDE::data::mode1","neff")[0][0]
+        neff_1 = np.real(neff_1)
+    else:
+        neff_1 = 0
+
+    return num_modes, neff_1
+
 def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength, wavelength_span,
                          sub_disk = 0, sub_disk_radius = 0, mesh_setting = 1):
     
@@ -293,7 +315,7 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
             plt.xlabel('X ')
             plt.ylabel('Z ')
             plt.title('|E|^2')
-            plt.savefig(os.path.join(output_folder, 'Esq_XZ_' + str(int(XY_DFT_wvls[closest_index]*1e9)) + 'nm_.png'))
+            plt.savefig(os.path.join(output_folder, 'Esq_XZ_' + str(int(XY_DFT_wvls[closest_index]*1e10)) + 'Angstroms.png'))
             plt.close()
             
             E = E_XY[:,:,0,closest_index,:]
@@ -326,7 +348,7 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
             plt.xlabel('X ')
             plt.ylabel('Y ')
             plt.title('|E|^2')
-            plt.savefig(os.path.join(output_folder, 'Esq_' + str(int(XY_DFT_wvls[closest_index]*1e9)) + 'nm_.png'))
+            plt.savefig(os.path.join(output_folder, 'Esq_' + str(int(XY_DFT_wvls[closest_index]*1e10)) + 'Angstroms.png'))
             plt.close()
             
             E_1d = []
@@ -353,7 +375,7 @@ def microdisk_resonances(disk_radius, disk_thickness, material_index, wavelength
             plt.xlim((0, disk_radius*3))
             plt.legend()
             plt.grid(True)
-            plt.savefig(os.path.join(output_folder, 'E_1D_' + str(int(XY_DFT_wvls[closest_index]*1e9)) + 'nm_.png'))
+            plt.savefig(os.path.join(output_folder, 'E_1D_' + str(int(XY_DFT_wvls[closest_index]*1e10)) + 'Angstroms.png'))
             plt.close()
             decay_lengths[i] = disk_radius - r_1d[index]
           
