@@ -18,25 +18,28 @@ def PhC_Q_Simulation(cavity = None,
                     sim_wvl = 955e-9, 
                     min_boundary_conditions = ["symmetric", "anti-symmetric", "PML"],
                     max_boundary_condition = "PML",
-                    output_folder =  None, 
+                    output_folder =  'Q_simulation', 
                     dimension = "3D",
                     mesh_accuracy = 2,
                     sim_time = 2e12,
-                    use_fine_mesh = 1,
+                    use_fine_mesh = True,
                     mesh_resolutions = [10e-9, 20e-9, 20e-9],
-                    save_mode_profiles = 1,
+                    save_mode_profiles = True,
                     cavity_name = 'cavity' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))):
     
     os.makedirs(output_folder, exist_ok=True)
 
     sim = lp.FDTD(hide=True)
 
+    #Add the cavity
+    cavity.add_to_sim(sim)
+
     #Add FDTD Object
     fdtd = so.FDTD(x = 0, y = 0, z = 0,
                     xspan = (cavity.num_cav + cavity.num_mir + 10)*cavity.amir,
                     yspan = (math.ceil(cavity.wy/cavity.amir) + 8)*cavity.amir,
                     zspan = (math.ceil(cavity.wy/cavity.amir) + 8)*cavity.amir,
-                    mesh_accuracy = 2,
+                    mesh_accuracy = mesh_accuracy,
                     dimension = dimension,
                     early_shutoff = 0,
                     max_BC = max_boundary_condition,
@@ -68,7 +71,7 @@ def PhC_Q_Simulation(cavity = None,
                               nx = 2, ny = 2, nz = 2)
     Q_analysis.add_to_sim(sim)
 
-    if use_fine_mesh == 1:
+    if use_fine_mesh:
         mesh = so.mesh(x = 0, y = 0, z = 0,
                        xspan = (cavity.num_cav + cavity.num_mir + 2*cavity.num_tap + 10)*cavity.amir,
                        yspan = 1.5*cavity.wy,
@@ -88,7 +91,7 @@ def PhC_Q_Simulation(cavity = None,
         f_maxQ          = Qcal['f'][ind_maxQ]
     
         #Mode volume and mode-profile
-        if save_mode_profiles == 1:
+        if save_mode_profiles:
             sim.switchtolayout()
             ModeV_Monitor = so.Mode_Volume_Monitor(x = 0, y = 0, z = 0,
                                                 xspan = (cavity.num_cav + cavity.num_mir + 2)*cavity.amir,

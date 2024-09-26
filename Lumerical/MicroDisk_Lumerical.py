@@ -883,14 +883,101 @@ def Ncav_Nmir_Sweep(cavity_parameters, num_cav_hole_list, num_mir_hole_list):
             print(results)
             pickle.dump(results, open(str(run_date) + str(cavity_number) +  "_Qscaling.p", "wb"))
 
+phc = so.hole_phc(amir = 170.54e-9, acav = 157.09e-9, wz = 220e-9, wy = 400e-9, hx = 66e-9, hy = 155e-9, 
+                  num_cav = 16, num_mir = 12, taper_exponent = 2, index = 3.55, substrate_index = 2.4)
 
-
-run_date = date.today()
+[Q, wvl] = sr.PhC_Q_Simulation(cavity=phc, save_mode_profiles=0)
+print(Q, wvl)
+""" run_date = date.today()
 
 wavelength = 1550e-9
 n_dia = 2.3682
 
-wg_widths = np.linspace(100e-9, 2000e-9, 20)
+#Micro-disk with center pillar
+disk_radii = np.array([11])*1e-6
+thicknesses = np.array([1e-6])
+widths = np.array([5e-6])
+
+min_gap = 2e-6
+
+Q = []
+res_wvls = []
+decay_lengths = []
+FSR = []
+rad = []
+thick = []
+width = []
+min_FSR = []
+min_overlap = []
+mode_overlap = []
+
+
+ring_r = 20e-6
+nmodes, neffs, wvls = sr.microring_resonances_FDE(wg_xspan=5e-6, wg_yspan=1e-6, ring_radius=ring_r, wg_index=n_dia, wavelength_center=wavelength, wavelength_span=2e-9)
+
+tolerance = 0.01
+# Create the scatter plot
+for i, wvl in enumerate(wvls):
+    for neff in neffs[i]:
+        # Plot the point
+        plt.scatter(wvl, neff, color='blue')
+        
+        # Calculate m
+        m = 2 * np.pi * neff * ring_r / wvl
+        # Check if m is close to an integer
+        if np.abs(m - round(m)) < tolerance:
+            # Add a red 'x' at the corresponding (wvl, neff)
+            plt.scatter(wvl, neff, color='red', marker='x')
+            print(wvl, neff, m)
+
+# Add labels and title
+plt.xlabel('Wavelengths (wvls)')
+plt.ylabel('Effective Indices (neffs)')
+plt.title('Scatter Plot of Wavelengths vs. Effective Indices')
+# Show the plot
+plt.show() """
+
+""" for t in thicknesses:
+    for r in disk_radii:
+        for w in widths:
+            if r - w > min_gap:
+                results  = sr.spoked_microdisk_resonances(outer_radius=r, 
+                                                thickness=t,
+                                                width=w,
+                                                material_index=2.3682,  
+                                                wavelength=wavelength, 
+                                                wavelength_span=100e-9,
+                                                mesh_setting=2)
+                if results != -1:
+                    Q.append(results['Q_factors'])
+                    res_wvls.append(results['resonance_wavelengths'])
+                    decay_lengths.append(results['decay_lengths'])
+                    rad.append(r)
+                    thick.append(t)
+                    width.append(w)
+                    FSR.append(results['delta_f'])
+                    try:
+                        min_FSR.append(np.min(results['delta_f']))
+                        min_overlap.append(results['mode_overlap'][np.argmin(results['delta_f'])])
+                    except Exception as e:
+                        print(e)
+                    mode_overlap.append(results['mode_overlap'])
+                    
+
+                results = {'resonance_wavelengths': res_wvls,
+                            'Q_factors' : Q,
+                            'decay_lengths': decay_lengths,
+                            "radii": rad,
+                            "thicknesses": thick,
+                            'widths': width,
+                            'FSR'   : FSR,
+                            'overlaps' : mode_overlap}
+
+                with open(str(run_date)+"_SupportedRing_r_t_w_sweep.p", "wb") as f:
+                    pickle.dump(results, f)
+ """
+
+""" wg_widths = np.linspace(100e-9, 2000e-9, 20)
 wg_heights = np.linspace(100e-9, 2000e-9, 20)
 
 nmodes = np.zeros((20,20))
@@ -908,7 +995,7 @@ for i in range(len(wg_widths)):
         with open(str(run_date)+"_wx_wy_wg_neff_sweep.p", "wb") as f:
             pickle.dump(results, f)
         
-        savemat(str(run_date)+"_wx_wy_wg_neff_sweep.mat", results)
+        savemat(str(run_date)+"_wx_wy_wg_neff_sweep.mat", results) """
 
 
 """ start_w = 500e-9
