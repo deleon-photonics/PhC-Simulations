@@ -74,6 +74,8 @@ class FDE:
         self.ymin_bc = "PML"
         self.wavelength = 1550e-9
         self.ntrials = 10
+        self.bent_wg = 0
+        self.bend_radius = 10e-6
 
         # Update properties with any provided keyword arguments
         for key, value in kwargs.items():
@@ -91,7 +93,9 @@ class FDE:
             ("x max bc", self.max_bc),
             ("y max bc", self.max_bc),
             ("wavelength", self.wavelength),
-            ("number of trial modes", self.ntrials)])
+            ("number of trial modes", self.ntrials),
+            ("bent waveguide", self.bent_wg),
+            ("bend radius", self.bend_radius)])
 
         sim.addfde(properties=fde_properties)    
 
@@ -534,6 +538,7 @@ class microdisk:
         self.radius = 1e-6
         self.material = "<Object defined dielectric>"
         self.index = 2.4
+        self.mesh_order = 2
 
         # Update properties with any provided keyword arguments
         for key, value in kwargs.items():
@@ -548,7 +553,9 @@ class microdisk:
                            ("radius", self.radius),
                            ("material", self.material),
                            ("index", self.index),
-                           ('name', self.name)])
+                           ('name', self.name),
+                           ("override mesh order from material database", 1),
+                           ("mesh order", self.mesh_order)])
 
         sim.addcircle(properties=disk_properties)
          
