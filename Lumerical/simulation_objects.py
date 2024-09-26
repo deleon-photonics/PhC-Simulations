@@ -63,6 +63,41 @@ class FDTD:
 
         sim.addfdtd(properties=fdtd_properties)
         
+class FDE:
+    def __init__(self, **kwargs):
+        self.x = 0
+        self.y = 0
+        self.xspan = 1e-6
+        self.yspan = 1e-6
+        self.max_bc = "PML"
+        self.xmin_bc = "PML"
+        self.ymin_bc = "PML"
+        self.wavelength = 1550e-9
+        self.ntrials = 10
+        self.bent_wg = 0
+        self.bend_radius = 10e-6
+
+        # Update properties with any provided keyword arguments
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    def add_to_sim(self, sim):
+        fde_properties = OrderedDict([
+            ("x", self.x),
+            ("y", self.y),
+            ("x span", self.xspan),
+            ("y span", self.yspan),
+            ("x min bc", self.xmin_bc),
+            ("y min bc", self.ymin_bc),
+            ("x max bc", self.max_bc),
+            ("y max bc", self.max_bc),
+            ("wavelength", self.wavelength),
+            ("number of trial modes", self.ntrials),
+            ("bent waveguide", self.bent_wg),
+            ("bend radius", self.bend_radius)])
+
+        sim.addfde(properties=fde_properties)    
 
 #Mesh Object
 class mesh:
@@ -361,6 +396,8 @@ class Mode_Volume_Monitor:
 class hole_phc:
     def __init__(self, **kwargs):
         self.name = "phc"
+        
+        self.index = 1
 
         self.amir = 100e-9
         self.acav = 100e-9
@@ -383,10 +420,11 @@ class hole_phc:
         self.wz_error = 0
         self.period_error = 0
 
+        self.use_custom_taper = False
         self.custom_taper = []
 
-        self.index = 3.5
-        self.substrate_index = 2.4
+        self.use_substrate = True
+        self.substrate_index = 1
 
         for key, value in kwargs.items():
             if hasattr(self, key):
@@ -417,7 +455,7 @@ class hole_phc:
         self.wy = np.random.normal(self.wy, self.wy_error)
         self.wz = np.random.normal(self.wz, self.wz_error) 
 
-    def use_custom_taper(self):
+    def generate_custom_taper(self):
         mirror_holes = self.amir*np.ones(int(self.num_mir/2))
         self.period_list = np.append(self.custom_taper, mirror_holes)
         self.period_list = np.append(np.fliplr(self.period_list), self.period_list)
@@ -437,7 +475,15 @@ class hole_phc:
         ])
         sim.addrect(properties = substrate_properties)
 
-    def add_to_sim(self, sim):    
+    def add_to_sim(self, sim):
+        if self.use_custom_taper:
+            self.generate_custom_taper()
+        else:
+            self.generate_hole_list_nominal()
+
+        if self.use_substrate:
+            self.add_substrate(sim)
+
         beam_properties = OrderedDict([
             ("x", 0), 
             ("x span", (self.num_cav + self.num_mir + 60)*self.amir + 10e-6),
@@ -492,124 +538,3 @@ class hole_phc:
             sim.addcircle(properties = right_hole)
             sim.addcircle(properties = left_hole)
 
-
-class microdisk:
-    def __init__(self, **kwargs):
-        self.name = "disk"
-        self.x = 0
-        self.y = 0
-        self.z = 0
-        self.thickness = 1e-6
-        self.radius = 1e-6
-        self.material = "<Object defined dielectric>"
-        self.index = 2.4
-
-        # Update properties with any provided keyword arguments
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-
-    def add_to_sim(self, sim):
-        disk_properties = OrderedDict([("x", self.x),
-                           ("y", self.y),
-                           ("z", self.z),
-                           ("z span", self.thickness),
-                           ("radius", self.radius),
-                           ("material", self.material),
-                           ("index", self.index),
-                           ('name', self.name)])
-
-        sim.addcircle(properties=disk_properties)
-         
-class rectangular_grating:
-    def __init__(self, **kwargs):
-        self.name = "grating"
-        self.x_edge = 0
-        self.y = 0
-        self.z = 0
-        self.period = 1e-6
-        self.duty_cycle = 0.5
-        self.num_gratings = 10
-        self.wy = 1e-6
-        self.wz = 1e-6
-        self.material = "<Object defined dielectric>"
-        self.index = 2.4
-
-        # Update properties with any provided keyword arguments
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-
-    def add_to_sim(self, sim):
-        xpos = self.x_edge + self.period*(1-self.duty_cycle)
-        for i in range(self.num_gratings):
-            grating_properties = OrderedDict([
-                ("x min", xpos), ("x max", xpos + self.period*self.duty_cycle), 
-                ("y", self.y),
-                ("z", self.z),
-                ("z span", self.wz),
-                ("y span", self.wy),
-                ("material", self.material),
-                ("index", self.index),
-                ('name', self.name + str(i))])
-            sim.addrect(properties=grating_properties)
-            xpos = xpos + self.period
-
-class waveguide:
-    def __init__(self, **kwargs):
-        self.name = "waveguide"
-        self.x = 0
-        self.y = 0
-        self.z = 0
-        self.wx = 1e-6
-        self.wy = 1e-6
-        self.wz = 1e-6
-        self.material = "<Object defined dielectric>"
-        self.index = 2.4
-
-        # Update properties with any provided keyword arguments
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-
-    def add_to_sim(self, sim):
-        waveguide_properties = OrderedDict([("x", self.x),
-                           ("y", self.y),
-                           ("z", self.z),
-                           ("x span", self.wx),
-                           ("y span", self.wy),
-                           ("z span", self.wz),
-                           ("material", self.material),
-                           ("index", self.index),
-                           ('name', self.name)])
-
-        sim.addrect(properties=waveguide_properties)
-         
-class polygon:
-    def __init__(self, **kwargs):
-        self.name = "polygon"
-        self.x = 0
-        self.y = 0
-        self.z = 0
-        self.zspan = 1e-6
-        self.vertices = [[0, 0], [1, 0], [0.5, 1]]
-        self.material = "<Object defined dielectric>"
-        self.index = 2.4
-
-        # Update properties with any provided keyword arguments
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-
-    def add_to_sim(self, sim):
-        taper_props = OrderedDict([("x", self.x),
-                           ("y", self.y),
-                           ("z", self.z),
-                           ("z span", self.zspan),
-                           ("material", self.material),
-                           ("index", self.index),
-                           ('name', self.name)])
-
-        sim.addpoly(properties=taper_props)
-        sim.set("vertices", self.vertices)
-         
