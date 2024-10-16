@@ -18,15 +18,16 @@ def PhC_Q_Simulation(cavity = None,
                     sim_wvl = 955e-9, 
                     min_boundary_conditions = ["symmetric", "anti-symmetric", "PML"],
                     max_boundary_condition = "PML",
-                    output_folder =  'Q_simulation', 
                     dimension = "3D",
                     mesh_accuracy = 2,
-                    sim_time = 2e12,
+                    sim_time = 2e-12,
                     use_fine_mesh = True,
                     mesh_resolutions = [10e-9, 20e-9, 20e-9],
                     save_mode_profiles = True,
                     cavity_name = 'cavity' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))):
-    
+
+    current_path = os.getcwd()
+    output_folder = os.path.join(current_path, cavity_name)
     os.makedirs(output_folder, exist_ok=True)
 
     sim = lp.FDTD(hide=True)
@@ -63,7 +64,7 @@ def PhC_Q_Simulation(cavity = None,
     dipole_2.add_to_sim(sim)
 
     #Q-analysis object
-    Q_analysis = so.Qanalysis(t_start = 500e-12,
+    Q_analysis = so.Qanalysis(t_start = 0.5e-12,
                               fmin = 3e8/(sim_wvl + 50e-9),
                               fmax = 3e8/(sim_wvl - 50e-9),
                               x = 20e-9, y = 20e-9, z = cavity.wz/6,
@@ -73,7 +74,7 @@ def PhC_Q_Simulation(cavity = None,
 
     if use_fine_mesh:
         mesh = so.mesh(x = 0, y = 0, z = 0,
-                       xspan = (cavity.num_cav + cavity.num_mir + 2*cavity.num_tap + 10)*cavity.amir,
+                       xspan = (cavity.num_cav + cavity.num_mir + 10)*cavity.amir,
                        yspan = 1.5*cavity.wy,
                        zspan = 1.5*cavity.wz,
                        x_resolution = mesh_resolutions[0],
@@ -82,6 +83,10 @@ def PhC_Q_Simulation(cavity = None,
         mesh.add_to_sim(sim)
 
     try:
+        fsp_path = os.path.join(output_folder, 'gui.fsp')
+        if os.path.isfile(fsp_path):
+            os.remove(fsp_path)
+        sim.save(fsp_path)
         sim.run()
         sim.runanalysis()
         Qcal            = sim.getresult(Q_analysis.get_name(), "Q")
@@ -129,14 +134,14 @@ def PhC_Q_Simulation(cavity = None,
                             'wvl'           : lambda_maxQ,
                             'ModeVol'       : ModeV,
                             'ModeVolNorm'   : ModeV_norm}
-            filename = f'FieldProfile_{str(cavity_name)}'
+            filename = os.path.join(output_folder, f'FieldProfile_{str(cavity_name)}')
             scipy.io.savemat((filename + '.mat'), {'FieldProfile': FieldProfile})
             pickle.dump(FieldProfile, open((filename + '.p'), "wb"))
             
-            return [maxQ, lambda_maxQ, ModeV, ModeV_norm]
+            return [maxQ, lambda_maxQ[0], ModeV, ModeV_norm]
         
         else:
-            return [maxQ, lambda_maxQ]
+            return [maxQ, lambda_maxQ[0]]
         
     except Exception as e:
         print(f"No Resonance Found: {e}")

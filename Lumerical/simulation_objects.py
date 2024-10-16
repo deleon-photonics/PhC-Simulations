@@ -431,6 +431,7 @@ class hole_phc:
                 setattr(self, key, value)
 
     def generate_hole_list_nominal(self):
+        num_holes = int(self.num_cav + self.num_mir)
         mirror_holes = self.amir*np.ones(int(self.num_mir/2))
 
         N = int(self.num_cav/2)
@@ -440,12 +441,11 @@ class hole_phc:
 
         for i in range(N):
             self.period_list[i] = a*(i ** self.taper_exponent) + b
-
         self.period_list = np.append(self.period_list, mirror_holes)
-        self.period_list = np.append(np.fliplr(self.period_list), self.period_list)
+        self.period_list = np.append(np.flip(self.period_list), self.period_list)
 
-        self.hx_list     = self.hx*np.ones((self.num_cav + self.num_mir))
-        self.hy_list     = self.hy*np.ones((self.num_cav + self.num_mir))
+        self.hx_list     = self.hx*np.ones(num_holes)
+        self.hy_list     = self.hy*np.ones(num_holes)
     
     def add_noise(self):
         for i in range(len(self.period_list)):
@@ -462,6 +462,7 @@ class hole_phc:
 
     def add_substrate(self, sim):
         substrate_properties = OrderedDict([
+            ("name", "substrate"),
             ("x", 0), 
             ("x span", (self.num_cav + self.num_mir + 60)*self.amir + 10e-6),
             ("y", 0), 
@@ -485,6 +486,7 @@ class hole_phc:
             self.add_substrate(sim)
 
         beam_properties = OrderedDict([
+            ("name", self.name),
             ("x", 0), 
             ("x span", (self.num_cav + self.num_mir + 60)*self.amir + 10e-6),
             ("y", 0), 
