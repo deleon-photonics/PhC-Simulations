@@ -351,7 +351,8 @@ class time_monitor:
 
 class Mode_Volume_Monitor:
     def __init__(self, **kwargs):
-        self.name = 'ModeV' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
+        #self.name = 'ModeV' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
+        self.name = "mode_volume"
         self.x = 0
         self.y = 0
         self.z = 0
@@ -367,10 +368,10 @@ class Mode_Volume_Monitor:
     
     def add_to_sim(self, sim):
         ModeV_props = [("use relative coordinates", 0),
-                   ("x", self.x), ("x span", self.xspan),
-                   ("y", self.y), ("y span", self.yspan),
-                   ("z", self.z), ("z span", self.zspan),
-                   ("calc type", 2)]
+                    ("x", self.x), ("x span", self.xspan),
+                    ("y", self.y), ("y span", self.yspan),
+                    ("z", self.z), ("z span", self.zspan),
+                    ("calc type", 2)]
 
         sim.addobject("mode_volume")
         for property in ModeV_props:
@@ -414,6 +415,7 @@ class hole_phc:
         self.hx_list = []
         self.hy_list = []
 
+        self.noisy_cavity = False
         self.hx_error = 0
         self.hy_error = 0
         self.wy_error = 0
@@ -479,6 +481,9 @@ class hole_phc:
     def add_to_sim(self, sim):
         if self.use_custom_taper:
             self.generate_custom_taper()
+        elif self.noisy_cavity:
+            self.generate_hole_list_nominal()
+            self.add_noise()
         else:
             self.generate_hole_list_nominal()
 
