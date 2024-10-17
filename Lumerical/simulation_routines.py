@@ -31,10 +31,8 @@ def PhC_Q_Simulation(cavity = None,
     os.makedirs(output_folder, exist_ok=True)
 
     sim = lp.FDTD(hide=True)
-
     #Add the cavity
     cavity.add_to_sim(sim)
-
     #Add FDTD Object
     fdtd = so.FDTD(x = 0, y = 0, z = 0,
                     xspan = (cavity.num_cav + cavity.num_mir + 10)*cavity.amir,
