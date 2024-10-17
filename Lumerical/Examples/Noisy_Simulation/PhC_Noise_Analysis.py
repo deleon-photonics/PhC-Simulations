@@ -27,7 +27,7 @@ C1 = so.hole_phc(amir       = 172e-9,
                  hx         = 71e-9,
                  hy         = 186e-9,
                  num_cav    = 16,
-                 num_mir    = 12,
+                 num_mir    = 40,
                  index      = n_GaAs,
                  substrate_index = n_diamond)
 
@@ -38,19 +38,37 @@ C1 = so.hole_phc(amir       = 172e-9,
                         cavity_name = 'C1_nominal',
                         min_boundary_conditions=["PML", "anti-symmetric", "PML"])
 
-#Error values for noisy simulations
-C1.noisy_cavity = True
-C1.hx_error = 0.02*C1.hx
-C1.hy_error = 0.02*C1.hy
-C1.wy_error = 0.01*C1.wy
-C1.period_error = 0.75e-9
-C1.wz_error = 0
-
 for i in range(num_iter):
-    [Q_noisy[i], res_wvls_noisy[i]] = sr.PhC_Q_Simulation(cavity = C1,
+    noisy_cavity = so.hole_phc(amir       = C1.amir,
+                               acav       = C1.acav,
+                               wz         = C1.wz,
+                               wy         = C1.wy,
+                               hx         = C1.hx,
+                               hy         = C1.hy,
+                               num_cav    = C1.num_cav,
+                               num_mir    = C1.num_mir,
+                               index      = C1.index,
+                               substrate_index = C1.substrate_index,
+                               noisy_cavity = True,
+                               hx_error    = 0.02*C1.hx,
+                               hy_error    = 0.02*C1.hy,
+                               wy_error    = 0.01*C1.wy,
+                               period_error= 0.75e-9,
+                               wz_error    = 0)
+    
+    [Q_noisy[i], res_wvls_noisy[i]] = sr.PhC_Q_Simulation(cavity = noisy_cavity,
                         sim_wvl = wavelength,
                         save_mode_profiles = False,
                         min_boundary_conditions=["PML", "anti-symmetric", "PML"])
+    results = {'cavity'             : C1,
+               'noisy_cavity'   : noisy_cavity,
+                'Q_nominal'          : Q_nominal,
+                'Q_noisy'            : Q_noisy,
+                'res_wvl_nominal'    : res_wvl_nominal,
+                'res_wvls_noisy'     : res_wvls_noisy}
+    filename = os.path.join(os.getcwd(), 'C1_noise_analysis')
+    scipy.io.savemat((filename + '.mat'), {'results': results})
+    pickle.dump(results, open((filename + '.p'), "wb"))
 
 plt.scatter(res_wvls_noisy * 1e9, Q_noisy, marker='o', color='b')
 plt.scatter(res_wvl_nominal * 1e9, Q_nominal, marker='*', color='r')
@@ -62,12 +80,5 @@ plt.savefig('Q_vs_wvl_noisy.png', format='png', dpi=300)
 plt.close()
 
 
-results = {'cavity'             : C1,
-           'Q_nominal'          : Q_nominal,
-           'Q_noisy'            : Q_noisy,
-           'res_wvl_nominal'    : res_wvl_nominal,
-           'res_wvls_noisy'     : res_wvls_noisy}
-filename = os.path.join(os.getcwd(), 'C1_noise_analysis')
-scipy.io.savemat((filename + '.mat'), {'results': results})
-pickle.dump(results, open((filename + '.p'), "wb"))
+
             
